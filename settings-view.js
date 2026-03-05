@@ -2,6 +2,13 @@
 // SETTINGS-VIEW.JS — App Settings & Data Management
 // ═══════════════════════════════════════════════════
 
+// Chime repeat interval presets (seconds)
+const CHIME_INTERVAL_OPTIONS = [
+  { label: "15s", value: 15 },
+  { label: "30s", value: 30 },
+  { label: "45s", value: 45 },
+  { label: "60s", value: 60 },
+];
 
 window.SettingsView = function SettingsView({
   settings, onUpdateSettings, maHistory, onMaHistoryChange, records, onRecordsChange,
@@ -15,6 +22,11 @@ window.SettingsView = function SettingsView({
     onUpdateSettings(s);
     await saveSettings(s);
   };
+
+  // Effective volume display (master × timer, as percentage)
+  const effectivePercent = Math.round(
+    (safeNum(settings.masterVolume, 70) / 100) * (safeNum(settings.timerVolume, 100) / 100) * 100
+  );
 
   return (
     <>
@@ -32,7 +44,7 @@ window.SettingsView = function SettingsView({
           color={settings.mode === "Asleep" ? "#8b5cf6" : "#60a5fa"} />
       </Field>
 
-      {/* ── NEW: Void Tolerance Target ── */}
+      {/* ── Void Tolerance Target ── */}
       <Field label={`Deferral Target: ${safeNum(settings.targetDeferral, 5)} minutes`}>
         <input type="range" min="1" max="30" step="1" value={safeNum(settings.targetDeferral, 5)}
           onChange={e => updateSetting("targetDeferral", parseInt(e.target.value))}
@@ -46,7 +58,94 @@ window.SettingsView = function SettingsView({
         </div>
       </Field>
 
-      {/* mA History Editor */}
+      {/* ═══ SOUND & NOTIFICATIONS ═══ */}
+      <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(100,120,160,0.15)" }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0", marginBottom: 12 }}>
+          Sound & Notifications
+        </div>
+
+        {/* Master Volume */}
+        <Field label={`Master Volume: ${safeNum(settings.masterVolume, 70)}%`}>
+          <input type="range" min="0" max="100" step="5" value={safeNum(settings.masterVolume, 70)}
+            onChange={e => updateSetting("masterVolume", parseInt(e.target.value))}
+            style={{ width: "100%", accentColor: "#60a5fa" }} />
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+            <span style={{ fontSize: 10, color: "#64748b" }}>Off</span>
+            <span style={{ fontSize: 10, color: "#64748b" }}>100%</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+            Controls all app sounds — chimes, future alerts, and rewards.
+          </div>
+        </Field>
+
+        {/* Timer Chime Volume Override */}
+        <Field label={`Timer Chime Volume: ${safeNum(settings.timerVolume, 100)}%`}>
+          <input type="range" min="0" max="100" step="5" value={safeNum(settings.timerVolume, 100)}
+            onChange={e => updateSetting("timerVolume", parseInt(e.target.value))}
+            style={{ width: "100%", accentColor: "#f59e0b" }} />
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+            <span style={{ fontSize: 10, color: "#64748b" }}>Off</span>
+            <span style={{ fontSize: 10, color: "#64748b" }}>100%</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+            Relative to master volume. Effective level: <strong style={{ color: "#e2e8f0" }}>{effectivePercent}%</strong>
+          </div>
+        </Field>
+
+        {/* Chime Repeat Interval */}
+        <Field label={`Repeat Interval: every ${safeNum(settings.chimeRepeatInterval, 30)}s`}>
+          <div style={{ display: "flex", gap: 6 }}>
+            {CHIME_INTERVAL_OPTIONS.map(opt => (
+              <button key={opt.value} onClick={() => updateSetting("chimeRepeatInterval", opt.value)}
+                style={{
+                  flex: 1, padding: "8px 0", borderRadius: 8, border: "none",
+                  background: safeNum(settings.chimeRepeatInterval, 30) === opt.value
+                    ? "#60a5fa" : "rgba(100,120,160,0.12)",
+                  color: safeNum(settings.chimeRepeatInterval, 30) === opt.value
+                    ? "#fff" : "#94a3b8",
+                  fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}>{opt.label}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>
+            How often the chime repeats after a countdown timer expires. Interval shortens as escalation builds.
+          </div>
+        </Field>
+
+        {/* Chime Repeat Duration */}
+        <Field label={`Repeat Duration: ${safeNum(settings.chimeRepeatDuration, 2) === 0 ? "Single chime (no repeat)" : safeNum(settings.chimeRepeatDuration, 2) + " min"}`}>
+          <input type="range" min="0" max="10" step="1" value={safeNum(settings.chimeRepeatDuration, 2)}
+            onChange={e => updateSetting("chimeRepeatDuration", parseInt(e.target.value))}
+            style={{ width: "100%", accentColor: "#f59e0b" }} />
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+            <span style={{ fontSize: 10, color: "#64748b" }}>Off</span>
+            <span style={{ fontSize: 10, color: "#64748b" }}>10 min</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+            How long the chime repeats (escalating in volume and frequency). Set to 0 for a single chime only.
+          </div>
+        </Field>
+
+        {/* Test Chime Button */}
+        <button onClick={() => {
+          if (window.playTestChime) {
+            window.playTestChime(settings);
+            showToast("Chime played at " + effectivePercent + "% volume");
+          } else {
+            showToast("Audio not available");
+          }
+        }} style={{
+          width: "100%", padding: 12, borderRadius: 12, border: "1px solid rgba(96,165,250,0.3)",
+          background: "rgba(96,165,250,0.08)", color: "#60a5fa",
+          fontSize: 14, fontWeight: 600, cursor: "pointer",
+          fontFamily: "'DM Sans', sans-serif",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}>
+          <span style={{ fontSize: 18 }}>🔔</span> Test Chime
+        </button>
+      </div>
+
+      {/* ═══ mA History Editor ═══ */}
       <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(100,120,160,0.15)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0" }}>mA History</div>
@@ -154,7 +253,7 @@ window.SettingsView = function SettingsView({
         </div>
       </div>
 
-      {/* Data management */}
+      {/* ═══ Data Management ═══ */}
       <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(100,120,160,0.15)" }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0", marginBottom: 10 }}>Data</div>
         <button onClick={() => exportCSV(records)} style={{

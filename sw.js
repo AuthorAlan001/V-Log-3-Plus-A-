@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════
-// SW.JS — Service Worker
-// V Log Plus v3.1.0
-// Cache name derived from version — bump this when deploying
+// SW.JS — Service Worker with Version-Aware Caching
+// Neuro-Stim Voiding Diary v3.1
 // ═══════════════════════════════════════════════════
 
-const SW_VERSION = '3.1.0';
+// Version must match APP_VERSION in shared.js
+const SW_VERSION = '3.1';
 const CACHE_NAME = 'vlog-plus-v' + SW_VERSION;
 
 const ASSETS = [
@@ -47,15 +47,34 @@ self.addEventListener('activate', event => {
   );
 });
 
+// Network-first for navigation requests (HTML), cache-first for assets
 self.addEventListener('fetch', event => {
+  const request = event.request;
+
+  // Navigation requests: try network first so updates are picked up
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          // Cache the fresh copy
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          return response;
+        })
+        .catch(() => caches.match(request).then(cached => cached || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // All other requests: cache-first with network fallback
   event.respondWith(
-    caches.match(event.request)
-      .then(cached => cached || fetch(event.request))
+    caches.match(request)
+      .then(cached => cached || fetch(request))
       .catch(() => caches.match('./index.html'))
   );
 });
 
-// Listen for skip-waiting message from the app
+// Listen for skip waiting message from the app
 self.addEventListener('message', event => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();

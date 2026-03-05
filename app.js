@@ -17,6 +17,7 @@ function NeuroStimLog() {
   const [doctorNotes, setDoctorNotes] = useState([]);
   const [timers, setTimers] = useState([]);
   const [downloadInfo, setDownloadInfo] = useState(null);
+  const [updateReady, setUpdateReady] = useState(false);
   const toastTimer = useRef(null);
 
   const showToast = useCallback((msg) => {
@@ -25,9 +26,34 @@ function NeuroStimLog() {
     toastTimer.current = setTimeout(() => setToast(""), 2000);
   }, []);
 
-  // Load all data on mount
+  // Listen for SW update
+  useEffect(() => {
+    // Check if already waiting when component mounts
+    if (window._swUpdateReady) setUpdateReady(true);
+
+    const handler = () => setUpdateReady(true);
+    window.addEventListener('sw-update-ready', handler);
+    return () => window.removeEventListener('sw-update-ready', handler);
+  }, []);
+
+  // Apply update: tell waiting SW to take over, then page reloads via controllerchange
+  const applyUpdate = () => {
+    const reg = window._swRegistration;
+    if (reg && reg.waiting) {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+    // Fallback: if controllerchange doesn't fire within 2s, force reload
+    setTimeout(() => window.location.reload(), 2000);
+  };
+
+  // Load all data on mount (with migration from old DB)
   useEffect(() => {
     (async () => {
+      // Run migration before loading data
+      if (window.migrateFromOldDB) {
+        try { await window.migrateFromOldDB(); } catch(e) { console.error('Migration error:', e); }
+      }
+
       const [recs, s, mah, ints, notes, tmrs] = await Promise.all([
         loadRecords(), loadSettings(), loadMaHistory(), loadIntakes(), loadDoctorNotes(), loadTimers(),
       ]);
@@ -156,9 +182,34 @@ function NeuroStimLog() {
     <div style={containerStyle}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* ── TWO-ROW STICKY NAV BAR (NEW) ── */}
+      {/* ── UPDATE AVAILABLE BANNER ── */}
+      {updateReady && (
+        <div onClick={applyUpdate} style={{
+          position: "sticky", top: 0, zIndex: 100,
+          background: "linear-gradient(90deg, #059669, #10b981)",
+          padding: "10px 20px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          cursor: "pointer",
+          boxShadow: "0 2px 12px rgba(16,185,129,0.4)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 18 }}>🔄</span>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Update Available</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.8)" }}>Tap to refresh and get the latest version</div>
+            </div>
+          </div>
+          <div style={{
+            padding: "5px 12px", borderRadius: 8,
+            background: "rgba(255,255,255,0.2)", color: "#fff",
+            fontSize: 12, fontWeight: 600,
+          }}>Update</div>
+        </div>
+      )}
+
+      {/* ── TWO-ROW STICKY NAV BAR ── */}
       <div style={{
-        position: "sticky", top: 0, zIndex: 50,
+        position: "sticky", top: updateReady ? 52 : 0, zIndex: 50,
         background: "linear-gradient(180deg, #0f172a 0%, #131c30 100%)",
         borderBottom: "1px solid rgba(100,120,160,0.15)",
         padding: "10px 16px 8px",
@@ -211,7 +262,7 @@ function NeuroStimLog() {
       </div>
 
       {/* ── Timer Strip ── */}
-      <TimerStrip timers={timers} onTimersChange={setTimers} showToast={showToast} />
+      <TimerStrip timers={timers} onTimersChange={setTimers} showToast={showToast} settings={settings} />
 
       {/* Toast */}
       {toast && (

@@ -1,115 +1,38 @@
 // ═══════════════════════════════════════════════════
 // SHARED.JS — Storage, Constants, Data, Utilities
-// V Log Plus — Neuro-Stim Voiding Diary v3.1.0
+// Neuro-Stim Voiding Diary v3.1
 // ═══════════════════════════════════════════════════
-
-// ── App Version (single source of truth) ──
-window.APP_VERSION = "3.1.0";
 
 // ── IndexedDB Storage Shim ──
 (function() {
   const DB_NAME = 'vlog-plus-db';
   const OLD_DB_NAME = 'neuro-stim-db';
   const STORE_NAME = 'kv';
-  const MIGRATION_KEY = '_migrated-from-neuro-stim';
   let db = null;
-
-  function openNamedDB(name) {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(name, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
 
   function openDB() {
     return new Promise((resolve, reject) => {
       if (db) { resolve(db); return; }
-      openNamedDB(DB_NAME).then(d => { db = d; resolve(db); }).catch(reject);
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME);
+      req.onsuccess = () => { db = req.result; resolve(db); };
+      req.onerror = () => reject(req.error);
     });
   }
 
-  // One-time migration: copy all data from old 'neuro-stim-db' to new 'vlog-plus-db'
-  window._migrateFromOldDB = async function() {
-    try {
-      const newDB = await openDB();
-      // Check if already migrated
-      const checkTx = newDB.transaction(STORE_NAME, 'readonly');
-      const checkReq = checkTx.objectStore(STORE_NAME).get(MIGRATION_KEY);
-      const alreadyDone = await new Promise(resolve => {
-        checkReq.onsuccess = () => resolve(checkReq.result !== undefined);
-        checkReq.onerror = () => resolve(false);
-      });
-      if (alreadyDone) return { migrated: false, reason: 'already done' };
-
-      // Check if new DB already has real data (e.g. user already started using 3.1)
-      const keysTx = newDB.transaction(STORE_NAME, 'readonly');
-      const keysReq = keysTx.objectStore(STORE_NAME).getAllKeys();
-      const existingKeys = await new Promise(resolve => {
-        keysReq.onsuccess = () => resolve(keysReq.result || []);
-        keysReq.onerror = () => resolve([]);
-      });
-      if (existingKeys.length > 0) {
-        // Mark as migrated so we don't check again
-        const markTx = newDB.transaction(STORE_NAME, 'readwrite');
-        markTx.objectStore(STORE_NAME).put(true, MIGRATION_KEY);
-        return { migrated: false, reason: 'new db already has data' };
-      }
-
-      // Try to open old DB and read all data
-      let oldDB;
-      try { oldDB = await openNamedDB(OLD_DB_NAME); } catch(e) {
-        return { migrated: false, reason: 'old db not found' };
-      }
-
-      const readTx = oldDB.transaction(STORE_NAME, 'readonly');
-      const store = readTx.objectStore(STORE_NAME);
-      const allKeys = await new Promise((resolve, reject) => {
-        const req = store.getAllKeys();
-        req.onsuccess = () => resolve(req.result || []);
-        req.onerror = () => reject(req.error);
-      });
-
-      if (allKeys.length === 0) {
-        oldDB.close();
-        const markTx = newDB.transaction(STORE_NAME, 'readwrite');
-        markTx.objectStore(STORE_NAME).put(true, MIGRATION_KEY);
-        return { migrated: false, reason: 'old db empty' };
-      }
-
-      // Read all values from old DB
-      const allData = [];
-      for (const key of allKeys) {
-        const val = await new Promise((resolve, reject) => {
-          const rTx = oldDB.transaction(STORE_NAME, 'readonly');
-          const req = rTx.objectStore(STORE_NAME).get(key);
-          req.onsuccess = () => resolve(req.result);
-          req.onerror = () => reject(req.error);
-        });
-        allData.push({ key, value: val });
-      }
-      oldDB.close();
-
-      // Write all data to new DB
-      const writeTx = newDB.transaction(STORE_NAME, 'readwrite');
-      const writeStore = writeTx.objectStore(STORE_NAME);
-      for (const item of allData) {
-        writeStore.put(item.value, item.key);
-      }
-      writeStore.put(true, MIGRATION_KEY);
-      await new Promise((resolve, reject) => {
-        writeTx.oncomplete = () => resolve();
-        writeTx.onerror = () => reject(writeTx.error);
-      });
-
-      console.log('[V Log Plus] Migrated ' + allData.length + ' keys from ' + OLD_DB_NAME);
-      return { migrated: true, count: allData.length };
-    } catch(e) {
-      console.warn('[V Log Plus] Migration failed (non-fatal):', e);
-      return { migrated: false, reason: 'error', error: e };
-    }
-  };
+  // Open the old DB read-only for migration
+  function openOldDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(OLD_DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        // Old DB doesn't exist — abort so we don't create an empty one
+        req.transaction.abort();
+        resolve(null);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+  }
 
   window.storage = {
     async get(key) {
@@ -153,7 +76,73 @@ window.APP_VERSION = "3.1.0";
       });
     }
   };
+
+  // ── One-time migration from old DB ──
+  window.migrateFromOldDB = async function() {
+    var MIGRATION_FLAG = 'vlog-plus-migrated';
+    try {
+      var flag = await window.storage.get(MIGRATION_FLAG);
+      if (flag) return; // Already migrated
+    } catch(e) { /* not found — continue */ }
+
+    try {
+      var oldDb = await openOldDB();
+      if (!oldDb) {
+        await window.storage.set(MIGRATION_FLAG, 'true');
+        return;
+      }
+
+      if (!oldDb.objectStoreNames.contains(STORE_NAME)) {
+        oldDb.close();
+        await window.storage.set(MIGRATION_FLAG, 'true');
+        return;
+      }
+
+      // Read all keys/values from old DB
+      var allEntries = await new Promise(function(resolve, reject) {
+        var tx = oldDb.transaction(STORE_NAME, 'readonly');
+        var store = tx.objectStore(STORE_NAME);
+        var entries = [];
+        var cursorReq = store.openCursor();
+        cursorReq.onsuccess = function(e) {
+          var cursor = e.target.result;
+          if (cursor) {
+            entries.push({ key: cursor.key, value: cursor.value });
+            cursor.continue();
+          } else {
+            resolve(entries);
+          }
+        };
+        cursorReq.onerror = function() { reject(cursorReq.error); };
+      });
+
+      oldDb.close();
+
+      if (allEntries.length === 0) {
+        await window.storage.set(MIGRATION_FLAG, 'true');
+        return;
+      }
+
+      // Copy each entry to new DB (only if key doesn't already exist)
+      for (var i = 0; i < allEntries.length; i++) {
+        try {
+          await window.storage.get(allEntries[i].key);
+          // Key exists in new DB — skip
+        } catch(e) {
+          await window.storage.set(allEntries[i].key, allEntries[i].value);
+        }
+      }
+
+      await window.storage.set(MIGRATION_FLAG, 'true');
+      console.log('Migration complete: copied ' + allEntries.length + ' entries from old DB');
+    } catch(e) {
+      console.error('Migration error (non-fatal):', e);
+    }
+  };
 })();
+
+// ── App Version ──
+window.APP_VERSION = "3.1";
 
 // ── Storage Keys ──
 window.STORAGE_KEY = "neuro-log-records-v2";
@@ -186,7 +175,15 @@ window.MEAL_SIZES = ["Small", "Medium", "Large", "Jumbo"];
 
 window.DEFAULT_FILTERS = { accident: "All", mA: "All", wokeMe: "All", dateRange: "All", customFrom: "", customTo: "" };
 
-window.defaultSettings = { mA: 0.7, mode: "Awake", targetDeferral: 5 };
+window.defaultSettings = {
+  mA: 0.7,
+  mode: "Awake",
+  targetDeferral: 5,
+  masterVolume: 70,
+  timerVolume: 100,
+  chimeRepeatInterval: 30,
+  chimeRepeatDuration: 2,
+};
 
 // ── Tab Configuration ──
 window.TABS = [
@@ -205,7 +202,6 @@ window.INITIAL_MA_HISTORY = [
 ];
 
 window.INITIAL_RECORDS = [
-  // === 0.6 mA era ===
   {id:"p1",date:"2026-02-28",time:"07:55",volume:"100",type:"Standard",accident:"No",wokeMe:"No",initUrge:0,finalUrge:0,deferral:"",mode:"Awake",mA:0.6,notes:""},
   {id:"p2",date:"2026-02-28",time:"19:00",volume:"100",type:"Standard",accident:"No",wokeMe:"No",initUrge:1,finalUrge:3,deferral:"2",mode:"Awake",mA:0.6,notes:""},
   {id:"p3",date:"2026-02-28",time:"20:22",volume:"100",type:"Standard",accident:"No",wokeMe:"No",initUrge:1,finalUrge:2,deferral:"1",mode:"Awake",mA:0.6,notes:""},
@@ -213,7 +209,6 @@ window.INITIAL_RECORDS = [
   {id:"p5",date:"2026-03-01",time:"02:00",volume:"100",type:"Standard",accident:"No",wokeMe:"No",initUrge:1,finalUrge:0,deferral:"",mode:"Asleep",mA:0.6,notes:"Drank 8 oz water with 2 Tylenol"},
   {id:"p6",date:"2026-03-01",time:"03:26",volume:"260",type:"Standard",accident:"No",wokeMe:"No",initUrge:1,finalUrge:0,deferral:"",mode:"Asleep",mA:0.6,notes:""},
   {id:"p7",date:"2026-03-01",time:"07:35",volume:"200",type:"Standard",accident:"No",wokeMe:"Yes",initUrge:1,finalUrge:0,deferral:"0",mode:"Asleep",mA:0.6,notes:"Woke me"},
-  // === Changed to 0.7 mA at 10:39 ===
   {id:"p8",date:"2026-03-01",time:"10:45",volume:"200",type:"Standard",accident:"No",wokeMe:"No",initUrge:1,finalUrge:0,deferral:"0",mode:"Awake",mA:0.7,notes:"First void after mA change"},
   {id:"p9",date:"2026-03-01",time:"13:00",volume:"100",type:"Standard",accident:"No",wokeMe:"No",initUrge:0,finalUrge:0,deferral:"30",mode:"Awake",mA:0.7,notes:""},
   {id:"p10",date:"2026-03-01",time:"16:50",volume:"380",type:"Standard",accident:"No",wokeMe:"No",initUrge:2,finalUrge:0,deferral:"2",mode:"Awake",mA:0.7,notes:""},
@@ -226,7 +221,6 @@ window.INITIAL_RECORDS = [
   {id:"p17",date:"2026-03-02",time:"07:26",volume:"100",type:"Standard",accident:"No",wokeMe:"No",initUrge:2,finalUrge:0,deferral:"2",mode:"Awake",mA:0.7,notes:""},
   {id:"p18",date:"2026-03-02",time:"14:30",volume:"200",type:"Standard",accident:"No",wokeMe:"No",initUrge:0,finalUrge:0,deferral:"",mode:"Awake",mA:0.7,notes:""},
   {id:"p19",date:"2026-03-02",time:"15:30",volume:"150",type:"Standard",accident:"No",wokeMe:"No",initUrge:0,finalUrge:0,deferral:"",mode:"Awake",mA:0.7,notes:""},
-  // === Previously imported from spreadsheets ===
   {id:"1",date:"2026-02-24",time:"11:57",volume:"100",type:"Standard",accident:"No",wokeMe:"No",initUrge:0,finalUrge:1,deferral:"",mode:"Awake",mA:0.6,notes:""},
   {id:"2",date:"2026-02-26",time:"11:58",volume:"250",type:"Repeat",accident:"No",wokeMe:"No",initUrge:1,finalUrge:1,deferral:"",mode:"Awake",mA:0.6,notes:""},
   {id:"3",date:"2026-02-27",time:"11:59",volume:"150",type:"TEST",accident:"No",wokeMe:"No",initUrge:1,finalUrge:0,deferral:"",mode:"Awake",mA:0.6,notes:""},
@@ -350,9 +344,13 @@ window.saveRecords = async function(records) {
 window.loadSettings = async function() {
   try {
     var r = await window.storage.get(SETTINGS_KEY);
-    var s = r ? JSON.parse(r.value) : defaultSettings;
-    // Ensure targetDeferral exists (migration from older versions)
+    var s = r ? JSON.parse(r.value) : Object.assign({}, defaultSettings);
+    // Ensure all settings exist (migration from older versions)
     if (s.targetDeferral === undefined) s.targetDeferral = 5;
+    if (s.masterVolume === undefined) s.masterVolume = 70;
+    if (s.timerVolume === undefined) s.timerVolume = 100;
+    if (s.chimeRepeatInterval === undefined) s.chimeRepeatInterval = 30;
+    if (s.chimeRepeatDuration === undefined) s.chimeRepeatDuration = 2;
     return s;
   } catch(e) { return Object.assign({}, defaultSettings); }
 };
@@ -426,6 +424,127 @@ window.loadTimers = async function() {
 window.saveTimers = async function(timers) {
   try { await window.storage.set(TIMERS_KEY, JSON.stringify(timers)); } catch(e) {}
 };
+
+// ═══════════════════════════════════════════════════
+// WEB AUDIO CHIME ENGINE
+// Generates notification chimes using Web Audio API.
+// Supports escalating repeat pattern with volume control.
+// ═══════════════════════════════════════════════════
+(function() {
+  var audioCtx = null;
+  var activeChimeIntervals = {};
+
+  function getAudioCtx() {
+    if (!audioCtx || audioCtx.state === 'closed') {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  function playTone(volume, frequency, duration) {
+    try {
+      var ctx = getAudioCtx();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.value = frequency || 880;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      var now = ctx.currentTime;
+      var dur = duration || 0.15;
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(volume, now + 0.02);
+      gain.gain.setValueAtTime(volume, now + dur);
+      gain.gain.linearRampToValueAtTime(0, now + dur + 0.1);
+
+      osc.start(now);
+      osc.stop(now + dur + 0.15);
+    } catch(e) {
+      console.error('Chime playback error:', e);
+    }
+  }
+
+  function playChime(volume) {
+    playTone(volume, 784, 0.12);   // G5
+    setTimeout(function() {
+      playTone(volume, 1047, 0.18); // C6
+    }, 140);
+  }
+
+  function effectiveVolume(settings, escalationFactor) {
+    var master = safeNum(settings.masterVolume, 70) / 100;
+    var timer = safeNum(settings.timerVolume, 100) / 100;
+    var base = master * timer;
+    var escalated = base * (0.4 + 0.6 * escalationFactor);
+    return Math.min(1.0, Math.max(0, escalated));
+  }
+
+  window.startChimeSequence = function(settings, timerId) {
+    window.stopChimeSequence(timerId);
+
+    var repeatDuration = safeNum(settings.chimeRepeatDuration, 2);
+    var repeatInterval = safeNum(settings.chimeRepeatInterval, 30);
+
+    var vol = effectiveVolume(settings, repeatDuration > 0 ? 0 : 1);
+    if (vol > 0) playChime(vol);
+
+    if (repeatDuration <= 0) return;
+
+    var totalDurationMs = repeatDuration * 60 * 1000;
+    var startTime = Date.now();
+    var chimeCount = 0;
+    var maxChimes = Math.ceil(totalDurationMs / (repeatInterval * 1000)) + 5;
+
+    function scheduleNext() {
+      var elapsed = Date.now() - startTime;
+      if (elapsed >= totalDurationMs) {
+        var finalVol = effectiveVolume(settings, 1.0);
+        if (finalVol > 0) playChime(finalVol);
+        window.stopChimeSequence(timerId);
+        return;
+      }
+
+      chimeCount++;
+      if (chimeCount > maxChimes) { window.stopChimeSequence(timerId); return; }
+
+      var progress = elapsed / totalDurationMs;
+      var currentInterval = repeatInterval * (1 - 0.5 * progress);
+      var intervalMs = Math.max(5000, currentInterval * 1000);
+
+      activeChimeIntervals[timerId] = setTimeout(function() {
+        var v = effectiveVolume(settings, progress);
+        if (v > 0) playChime(v);
+        scheduleNext();
+      }, intervalMs);
+    }
+
+    scheduleNext();
+  };
+
+  window.stopChimeSequence = function(timerId) {
+    if (activeChimeIntervals[timerId]) {
+      clearTimeout(activeChimeIntervals[timerId]);
+      delete activeChimeIntervals[timerId];
+    }
+  };
+
+  window.stopAllChimes = function() {
+    Object.keys(activeChimeIntervals).forEach(function(id) {
+      clearTimeout(activeChimeIntervals[id]);
+    });
+    activeChimeIntervals = {};
+  };
+
+  window.playTestChime = function(settings) {
+    var vol = effectiveVolume(settings, 1.0);
+    if (vol > 0) playChime(vol);
+  };
+})();
 
 // ── CSV Export ──
 window.exportCSV = function(records) {

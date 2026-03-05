@@ -40,45 +40,51 @@
 
   <!-- Service Worker registration with cache-busting and update detection -->
   <script>
-  if ('serviceWorker' in navigator) {
-    // updateViaCache: 'none' forces browser to always check network for sw.js changes
+  (function() {
+    if (!('serviceWorker' in navigator)) return;
+
+    // updateViaCache: 'none' forces the browser to always fetch sw.js from
+    // the network, bypassing HTTP cache. This is the single most important
+    // fix for stale PWA updates.
     navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
       .then(function(reg) {
-        // Check for updates on every page load
-        reg.update().catch(function() {});
+        // Check for updates every 60 seconds while app is open
+        setInterval(function() { reg.update(); }, 60000);
 
         // Detect when a new SW is waiting to activate
-        function onNewSW(worker) {
-          window._swWaiting = worker;
-          window.dispatchEvent(new Event('sw-update-available'));
+        function onNewSW() {
+          window._swUpdateReady = true;
+          window._swRegistration = reg;
+          // Dispatch custom event so React can pick it up
+          window.dispatchEvent(new Event('sw-update-ready'));
         }
 
         if (reg.waiting) {
-          onNewSW(reg.waiting);
+          onNewSW();
         }
 
         reg.addEventListener('updatefound', function() {
           var newWorker = reg.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', function() {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                onNewSW(newWorker);
-              }
-            });
-          }
-        });
-
-        // Reload when the new SW takes over
-        var refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', function() {
-          if (!refreshing) {
-            refreshing = true;
-            window.location.reload();
-          }
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', function() {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New version installed and waiting — existing content is served by old SW
+              onNewSW();
+            }
+          });
         });
       })
-      .catch(function() {});
-  }
+      .catch(function(err) { console.error('SW registration failed:', err); });
+
+    // When the new SW takes over, reload to get fresh assets
+    var refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
+  })();
   </script>
 
   <!-- Set up React globals so all modules can use them without re-declaring -->

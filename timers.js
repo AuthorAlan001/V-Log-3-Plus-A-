@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════
 // TIMERS.JS — Persistent Timer Engine & UI Strip
 // Up to 3 concurrent timers, survives app close/screen off
-// V Log Plus v3.1.0
+// Chime notifications with escalating repeat on countdown expiry
 // ═══════════════════════════════════════════════════
 
 // Common timer presets for quick-start
@@ -11,67 +11,41 @@ const TIMER_PRESETS = [
   { label: "Custom", direction: "up" },
 ];
 
-// ── Chime: Web Audio API tone (no audio file needed, works offline) ──
-function playChime() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const notes = [659.25, 783.99, 987.77]; // E5, G5, B5 — pleasant major triad
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.15);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.5);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(ctx.currentTime + i * 0.15);
-      osc.stop(ctx.currentTime + i * 0.15 + 0.5);
-    });
-    // Clean up context after sounds finish
-    setTimeout(() => ctx.close().catch(() => {}), 2000);
-  } catch(e) { /* Audio not available — silent fallback */ }
-}
-
 // ── TimerStrip: Collapsible bar showing active timers ──
-window.TimerStrip = function TimerStrip({ timers, onTimersChange, showToast }) {
+window.TimerStrip = function TimerStrip({ timers, onTimersChange, showToast, settings }) {
   const [tick, setTick] = useState(0);
   const [showAdd, setShowAdd] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newDirection, setNewDirection] = useState("up");
   const [newDuration, setNewDuration] = useState("");
   const tickRef = useRef(null);
-  const chimedRef = useRef(new Set()); // Track which timers have already chimed
+  // Track which timers have already triggered their chime sequence
+  const chimeFiredRef = useRef({});
 
-  // Tick every second to update displays and check for expirations
+  // Tick every second to update displays
   useEffect(() => {
     if (timers.length > 0) {
-      tickRef.current = setInterval(() => {
-        setTick(t => t + 1);
-        // Check for newly expired countdown timers
-        timers.forEach(timer => {
-          if (timer.direction === "down" && timer.durationSeconds && !chimedRef.current.has(timer.id)) {
-            const started = new Date(timer.startedAt).getTime();
-            const elapsedSec = Math.floor((Date.now() - started) / 1000);
-            const remaining = timer.durationSeconds - elapsedSec;
-            if (remaining <= 0) {
-              chimedRef.current.add(timer.id);
-              playChime();
-            }
-          }
-        });
-      }, 1000);
+      tickRef.current = setInterval(() => setTick(t => t + 1), 1000);
     }
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
-  }, [timers]);
+  }, [timers.length]);
 
-  // Clean up chimed set when timers are removed
+  // Clean up chime tracking when timers are removed
   useEffect(() => {
-    const activeIds = new Set(timers.map(t => t.id));
-    chimedRef.current.forEach(id => {
-      if (!activeIds.has(id)) chimedRef.current.delete(id);
+    const timerIds = new Set(timers.map(t => t.id));
+    Object.keys(chimeFiredRef.current).forEach(id => {
+      if (!timerIds.has(id)) {
+        // Timer was removed — stop its chime and clean up
+        if (window.stopChimeSequence) window.stopChimeSequence(id);
+        delete chimeFiredRef.current[id];
+      }
     });
   }, [timers]);
+
+  // Stop all chimes on unmount
+  useEffect(() => {
+    return () => { if (window.stopAllChimes) window.stopAllChimes(); };
+  }, []);
 
   const addTimer = async () => {
     if (timers.length >= 3) { showToast("Max 3 timers"); return; }
@@ -94,6 +68,10 @@ window.TimerStrip = function TimerStrip({ timers, onTimersChange, showToast }) {
   };
 
   const removeTimer = async (id) => {
+    // Stop chime for this timer
+    if (window.stopChimeSequence) window.stopChimeSequence(id);
+    delete chimeFiredRef.current[id];
+
     const updated = timers.filter(t => t.id !== id);
     onTimersChange(updated);
     await saveTimers(updated);
@@ -118,6 +96,20 @@ window.TimerStrip = function TimerStrip({ timers, onTimersChange, showToast }) {
     if (h > 0) return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
     return m + ":" + String(s).padStart(2, "0");
   };
+
+  // Check for newly expired countdowns and fire chimes
+  timers.forEach(timer => {
+    if (timer.direction === "down") {
+      const elapsed = getElapsed(timer);
+      if (elapsed.expired && !chimeFiredRef.current[timer.id]) {
+        chimeFiredRef.current[timer.id] = true;
+        // Fire chime sequence using current settings
+        if (window.startChimeSequence && settings) {
+          window.startChimeSequence(settings, timer.id);
+        }
+      }
+    }
+  });
 
   if (timers.length === 0 && !showAdd) {
     return (
