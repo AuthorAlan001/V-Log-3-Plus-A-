@@ -284,6 +284,8 @@ window.SettingsView = function SettingsView({
           if (window.confirm("Import your existing spreadsheet data? This adds records without removing existing ones.")) {
             const input = document.createElement("input");
             input.type = "file"; input.accept = ".csv";
+            input.style.display = "none";
+            document.body.appendChild(input);
             input.onchange = async (e) => {
               const text = await e.target.files[0].text();
               const lines = text.split("\n").slice(1).filter(l => l.trim());
@@ -309,6 +311,7 @@ window.SettingsView = function SettingsView({
               onRecordsChange(updated);
               await saveRecords(updated);
               showToast(`Imported ${imported.length} records`);
+              document.body.removeChild(input);
             };
             input.click();
           }
