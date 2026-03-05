@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════
 // STATS-VIEW.JS — Charts & Clinical Summary
-// Includes dual-axis urge chart & void tolerance
+// Scatter plot urge chart, tolerance, volume
 // ═══════════════════════════════════════════════════
 
-const { ResponsiveContainer, ComposedChart, LineChart, Line, BarChart, Bar,
-        XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine } = Recharts;
+const { ResponsiveContainer, ComposedChart, LineChart, Line, BarChart, Bar, ScatterChart, Scatter,
+        XAxis, YAxis, ZAxis, Tooltip, CartesianGrid, Legend, ReferenceLine } = Recharts;
 
 window.StatsView = function StatsView({ records, settings, maHistory, intakes }) {
   const totalVoids = records.length;
@@ -16,10 +16,11 @@ window.StatsView = function StatsView({ records, settings, maHistory, intakes })
   const byDate = {};
   records.forEach(r => {
     const d = r.date;
-    if (!byDate[d]) byDate[d] = { date: d, count: 0, vol: 0, avgUrge: 0, urgeSum: 0, accidents: 0, wakes: 0, mA: safeNum(r.mA, 0.7), fluidIn: 0 };
+    if (!byDate[d]) byDate[d] = { date: d, count: 0, vol: 0, urgeSum: 0, finalUrgeSum: 0, accidents: 0, wakes: 0, mA: safeNum(r.mA, 0.7), fluidIn: 0 };
     byDate[d].count++;
     byDate[d].vol += safeNum(r.volume);
     byDate[d].urgeSum += safeNum(r.initUrge);
+    byDate[d].finalUrgeSum += safeNum(r.finalUrge);
     if (r.accident !== "No") byDate[d].accidents++;
     if (r.wokeMe === "Yes") byDate[d].wakes++;
     byDate[d].mA = safeNum(r.mA, byDate[d].mA);
@@ -27,13 +28,14 @@ window.StatsView = function StatsView({ records, settings, maHistory, intakes })
   intakes.forEach(i => {
     if (i.category === "Drink") {
       const d = i.date;
-      if (!byDate[d]) byDate[d] = { date: d, count: 0, vol: 0, avgUrge: 0, urgeSum: 0, accidents: 0, wakes: 0, mA: settings.mA, fluidIn: 0 };
+      if (!byDate[d]) byDate[d] = { date: d, count: 0, vol: 0, urgeSum: 0, finalUrgeSum: 0, accidents: 0, wakes: 0, mA: settings.mA, fluidIn: 0 };
       byDate[d].fluidIn += safeNum(i.amount);
     }
   });
   const dailyData = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date)).map(d => ({
     ...d,
-    avgUrge: d.count > 0 ? +(d.urgeSum / d.count).toFixed(1) : 0,
+    avgInitUrge: d.count > 0 ? +(d.urgeSum / d.count).toFixed(1) : 0,
+    avgFinalUrge: d.count > 0 ? +(d.finalUrgeSum / d.count).toFixed(1) : 0,
     label: new Date(d.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }),
   }));
 
@@ -137,29 +139,40 @@ window.StatsView = function StatsView({ records, settings, maHistory, intakes })
         </div>
       )}
 
-      {/* ── Urge Trend: Paired Bars (Initial vs Final per void) ── */}
+      {/* ── Urge Trend: Scatter Plot (Daily Avg Initial vs Final) ── */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Urge: Initial vs Final (per void)</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Daily Avg Urge: Initial vs Final</div>
         <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>
-          <span style={{ color: "#f59e0b" }}>■ Initial Urge</span> &nbsp;
-          <span style={{ color: "#a78bfa" }}>■ Final Urge</span> &nbsp;
-          Shorter purple = better resolution
+          <span style={{ color: "#3b82f6" }}>▲ Avg Initial</span> &nbsp;
+          <span style={{ color: "#f97316" }}>■ Avg Final</span> &nbsp;
+          Lower orange = better resolution
         </div>
         <div style={{ background: "rgba(30,41,59,0.5)", borderRadius: 14, padding: "12px 4px 4px 0" }}>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={timelineData} barCategoryGap="20%">
+            <ComposedChart data={dailyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,120,160,0.15)" />
-              <XAxis dataKey="label" tick={{ fill: "#64748b", fontSize: 9 }}
-                interval={Math.max(0, Math.floor(timelineData.length / 6))} />
+              <XAxis dataKey="label" tick={{ fill: "#64748b", fontSize: 10 }} />
               <YAxis domain={[0, 4]} ticks={[0, 1, 2, 3, 4]}
                 tick={{ fill: "#64748b", fontSize: 10 }} width={25} />
               <Tooltip {...chartTooltipStyle}
                 formatter={(value, name) => [safeNum(value).toFixed(1), name]}
               />
               <Legend wrapperStyle={{ fontSize: 11, color: "#94a3b8" }} />
-              <Bar dataKey="initUrge" fill="#f59e0b" radius={[3, 3, 0, 0]} name="Initial" opacity={0.85} />
-              <Bar dataKey="finalUrge" fill="#a78bfa" radius={[3, 3, 0, 0]} name="Final" opacity={0.85} />
-            </BarChart>
+              <Scatter dataKey="avgInitUrge" name="Avg Initial" fill="#3b82f6"
+                shape={(props) => {
+                  const { cx, cy } = props;
+                  return <polygon points={`${cx},${cy-7} ${cx-7},${cy+5} ${cx+7},${cy+5}`}
+                    fill="#3b82f6" stroke="#2563eb" strokeWidth={1} />;
+                }}
+              />
+              <Scatter dataKey="avgFinalUrge" name="Avg Final" fill="#f97316"
+                shape={(props) => {
+                  const { cx, cy } = props;
+                  return <rect x={cx-5} y={cy-5} width={10} height={10}
+                    fill="#f97316" stroke="#ea580c" strokeWidth={1} />;
+                }}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>

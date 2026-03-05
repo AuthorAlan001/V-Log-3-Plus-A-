@@ -69,13 +69,15 @@ window.ReportView = function ReportView({
 
     const byDate = {};
     rpt.forEach(r => {
-      if (!byDate[r.date]) byDate[r.date] = { count: 0, vol: 0, nightCount: 0, fluidIn: 0, meals: 0 };
+      if (!byDate[r.date]) byDate[r.date] = { count: 0, vol: 0, nightCount: 0, fluidIn: 0, meals: 0, initUrgeSum: 0, finalUrgeSum: 0 };
       byDate[r.date].count++;
       byDate[r.date].vol += safeNum(r.volume);
+      byDate[r.date].initUrgeSum += safeNum(r.initUrge);
+      byDate[r.date].finalUrgeSum += safeNum(r.finalUrge);
       if (r.wokeMe === "Yes" || r.mode === "Asleep") byDate[r.date].nightCount++;
     });
     intakes.forEach(i => {
-      if (!byDate[i.date]) byDate[i.date] = { count: 0, vol: 0, nightCount: 0, fluidIn: 0, meals: 0 };
+      if (!byDate[i.date]) byDate[i.date] = { count: 0, vol: 0, nightCount: 0, fluidIn: 0, meals: 0, initUrgeSum: 0, finalUrgeSum: 0 };
       if (i.category === "Drink") byDate[i.date].fluidIn += safeNum(i.amount);
       else byDate[i.date].meals++;
     });
@@ -84,6 +86,8 @@ window.ReportView = function ReportView({
     const chartData = chartDays.map(d => ({
       label: new Date(d+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}),
       vol: byDate[d].vol, count: byDate[d].count, wakes: byDate[d].nightCount, fluidIn: byDate[d].fluidIn || 0,
+      avgInitUrge: byDate[d].count > 0 ? +(byDate[d].initUrgeSum / byDate[d].count).toFixed(1) : 0,
+      avgFinalUrge: byDate[d].count > 0 ? +(byDate[d].finalUrgeSum / byDate[d].count).toFixed(1) : 0,
     }));
     const mAByDay = {};
     rpt.forEach(r => { mAByDay[r.date] = safeNum(r.mA, 0.7); });
@@ -197,7 +201,29 @@ window.ReportView = function ReportView({
         <div style="font-size:11px;color:#94a3b8;margin-top:4px"><span style="color:#3b82f6">■ Volume (ml)</span> &nbsp; <span style="color:#7c3aed">--- mA Setting</span></div></div>`;
     })();
 
-    const urgeChartData = rpt.map((r, i) => ({ label: `${i+1}`, initUrge: safeNum(r.initUrge), finalUrge: safeNum(r.finalUrge) }));
+    // Daily average urge scatter chart (blue triangles = initial, orange squares = final)
+    const urgeScatterChart = (() => {
+      const yScale = plotH / 4;
+      let gridLines = '', shapes = '', labels = '';
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.t + plotH - (i * yScale);
+        gridLines += `<line x1="${pad.l}" y1="${y}" x2="${svgW-pad.r}" y2="${y}" stroke="#e2e8f0" stroke-width="0.5"/>`;
+        gridLines += `<text x="${pad.l-5}" y="${y+4}" text-anchor="end" fill="#94a3b8" font-size="10">${i}</text>`;
+      }
+      chartData.forEach((d, i) => {
+        const cx = pad.l + i * gap + gap/2;
+        const yInit = pad.t + plotH - (d.avgInitUrge * yScale);
+        const yFinal = pad.t + plotH - (d.avgFinalUrge * yScale);
+        // Blue triangle for initial urge
+        shapes += `<polygon points="${cx},${yInit-7} ${cx-7},${yInit+5} ${cx+7},${yInit+5}" fill="#3b82f6" stroke="#2563eb" stroke-width="1"/>`;
+        // Orange square for final urge
+        shapes += `<rect x="${cx-5}" y="${yFinal-5}" width="10" height="10" fill="#f97316" stroke="#ea580c" stroke-width="1"/>`;
+        labels += `<text x="${cx}" y="${svgH-pad.b+14}" text-anchor="middle" fill="#64748b" font-size="9" transform="rotate(-30 ${cx} ${svgH-pad.b+14})">${d.label}</text>`;
+      });
+      return `<div style="margin:12px 0"><div style="font-size:14px;font-weight:600;color:#334155;margin-bottom:6px">Daily Avg Urge: Initial vs Final</div>
+        <svg width="100%" viewBox="0 0 ${svgW} ${svgH}" style="background:#fafbfc;border:1px solid #e2e8f0;border-radius:8px">${gridLines}${shapes}${labels}</svg>
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px"><span style="color:#3b82f6">▲ Avg Initial</span> &nbsp; <span style="color:#f97316">■ Avg Final</span> &nbsp; Lower orange = better resolution</div></div>`;
+    })();
     const hasFluid = chartData.some(d => d.fluidIn > 0);
     const fluidChart = hasFluid ? (() => {
       const maxF = Math.max(1, ...chartData.map(d => Math.max(d.vol, d.fluidIn)));
@@ -288,7 +314,7 @@ window.ReportView = function ReportView({
     ${volMaChart}
     ${makeBarChart("Daily Voids & Night Wakes", chartData, "count", "#60a5fa", "wakes", "#8b5cf6")}
     ${hasFluid ? fluidChart : ''}
-    ${urgeChartData.length <= 60 ? makeLineChart("Urge Trend (per void)", urgeChartData, "initUrge", "#f97316", "finalUrge", "#a78bfa", 4) : ''}
+    ${urgeScatterChart}
 
     <h2>Daily Summary</h2>
     <table>
