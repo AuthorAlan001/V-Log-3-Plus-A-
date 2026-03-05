@@ -43,8 +43,6 @@ window.StatsView = function StatsView({ records, settings, maHistory, intakes })
     volume: safeNum(r.volume),
     initUrge: safeNum(r.initUrge),
     finalUrge: safeNum(r.finalUrge),
-    // Inverted final urge for dual-axis: 4 - finalUrge so 0 (resolved) shows at top
-    finalUrgeInv: 4 - safeNum(r.finalUrge),
     deferral: safeNum(r.deferral),
   }));
 
@@ -139,33 +137,29 @@ window.StatsView = function StatsView({ records, settings, maHistory, intakes })
         </div>
       )}
 
-      {/* ── NEW: Dual-Axis Urge Trend Chart ── */}
+      {/* ── Urge Trend: Paired Bars (Initial vs Final per void) ── */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Urge Trend (per void)</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Urge: Initial vs Final (per void)</div>
         <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>
-          <span style={{ color: "#f59e0b" }}>■ Initial</span> (left axis: 0–4, up = stronger) &nbsp;
-          <span style={{ color: "#a78bfa" }}>■ Resolution</span> (right axis: 4–0 inverted, up = better)
+          <span style={{ color: "#f59e0b" }}>■ Initial Urge</span> &nbsp;
+          <span style={{ color: "#a78bfa" }}>■ Final Urge</span> &nbsp;
+          Shorter purple = better resolution
         </div>
         <div style={{ background: "rgba(30,41,59,0.5)", borderRadius: 14, padding: "12px 4px 4px 0" }}>
-          <ResponsiveContainer width="100%" height={200}>
-            <ComposedChart data={timelineData}>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={timelineData} barCategoryGap="20%">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,120,160,0.15)" />
-              <XAxis dataKey="label" tick={{ fill: "#64748b", fontSize: 9 }} interval={Math.max(0, Math.floor(timelineData.length / 6))} />
-              {/* Left axis: Initial Urge (0 bottom, 4 top — up = stronger urge) */}
-              <YAxis yAxisId="init" domain={[0, 4]} tick={{ fill: "#f59e0b", fontSize: 10 }} width={25} />
-              {/* Right axis: Final Urge INVERTED (4 bottom, 0 top — up = better resolution) */}
-              <YAxis yAxisId="final" orientation="right" domain={[0, 4]} reversed={true}
-                tick={{ fill: "#a78bfa", fontSize: 10 }} width={25} />
+              <XAxis dataKey="label" tick={{ fill: "#64748b", fontSize: 9 }}
+                interval={Math.max(0, Math.floor(timelineData.length / 6))} />
+              <YAxis domain={[0, 4]} ticks={[0, 1, 2, 3, 4]}
+                tick={{ fill: "#64748b", fontSize: 10 }} width={25} />
               <Tooltip {...chartTooltipStyle}
-                formatter={(value, name) => {
-                  if (name === "Initial") return [safeNum(value).toFixed(1), "Initial Urge"];
-                  if (name === "Final") return [safeNum(value).toFixed(1), "Final Urge"];
-                  return [value, name];
-                }}
+                formatter={(value, name) => [safeNum(value).toFixed(1), name]}
               />
-              <Line yAxisId="init" type="monotone" dataKey="initUrge" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="Initial" />
-              <Line yAxisId="final" type="monotone" dataKey="finalUrge" stroke="#a78bfa" strokeWidth={2} dot={{ r: 3 }} name="Final" />
-            </ComposedChart>
+              <Legend wrapperStyle={{ fontSize: 11, color: "#94a3b8" }} />
+              <Bar dataKey="initUrge" fill="#f59e0b" radius={[3, 3, 0, 0]} name="Initial" opacity={0.85} />
+              <Bar dataKey="finalUrge" fill="#a78bfa" radius={[3, 3, 0, 0]} name="Final" opacity={0.85} />
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
