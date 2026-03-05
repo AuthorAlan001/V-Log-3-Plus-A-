@@ -12,7 +12,7 @@ const CHIME_INTERVAL_OPTIONS = [
 
 window.SettingsView = function SettingsView({
   settings, onUpdateSettings, maHistory, onMaHistoryChange, records, onRecordsChange,
-  intakes, showToast, onStartNew,
+  intakes, onIntakesChange, showToast, onStartNew,
 }) {
   const [editingMa, setEditingMa] = useState(null);
   const [maForm, setMaForm] = useState({ date: "", mA: 0.7, mode: "Awake", notes: "" });
@@ -279,6 +279,44 @@ window.SettingsView = function SettingsView({
           fontSize: 15, fontWeight: 600, cursor: "pointer", marginBottom: 10,
           fontFamily: "'DM Sans', sans-serif",
         }}>Export Intake Log (CSV)</button>
+
+        <button onClick={async () => {
+          if (window.confirm("Import Intake Log? This adds records without removing existing ones.")) {
+            const input = document.createElement("input");
+            input.type = "file"; input.accept = ".csv";
+            input.style.display = "none";
+            document.body.appendChild(input);
+            input.onchange = async (e) => {
+              const text = await e.target.files[0].text();
+              const lines = text.split("\n").slice(1).filter(l => l.trim());
+              const imported = lines.map(line => {
+                const cols = line.split(",");
+                return {
+                  id: Date.now().toString() + Math.random().toString(36).slice(2),
+                  date: cols[0] ? cols[0].slice(0, 10) : "",
+                  time: cols[1] || "",
+                  category: cols[2] || "Drink",
+                  subtype: cols[3] || "",
+                  amount: cols[4] || "",
+                  mealSize: cols[5] || "",
+                  notes: (cols[6] || "").replace(/^"|"$/g, "").replace(/""/g, '"'),
+                };
+              });
+              const existing = await loadIntakes();
+              const updated = [...existing, ...imported];
+              await saveIntakes(updated);
+              if (onIntakesChange) onIntakesChange(updated);
+              showToast(`Imported ${imported.length} intake records`);
+              document.body.removeChild(input);
+            };
+            input.click();
+          }
+        }} style={{
+          width: "100%", padding: 14, borderRadius: 12, border: "none",
+          background: "rgba(249,115,22,0.1)", color: "#f97316",
+          fontSize: 15, fontWeight: 600, cursor: "pointer", marginBottom: 10,
+          fontFamily: "'DM Sans', sans-serif",
+        }}>Import Intake Log (CSV)</button>
 
         <button onClick={async () => {
           if (window.confirm("Import your existing spreadsheet data? This adds records without removing existing ones.")) {

@@ -23,7 +23,7 @@ function NeuroStimLog() {
   const showToast = useCallback((msg) => {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(""), 4000);
+    toastTimer.current = setTimeout(() => setToast(""), 2000);
   }, []);
 
   // Listen for SW update
@@ -270,8 +270,8 @@ function NeuroStimLog() {
           position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)",
           background: "#22c55e", color: "#fff", padding: "8px 20px", borderRadius: 20,
           fontSize: 14, fontWeight: 600, zIndex: 999, fontFamily: "'DM Sans', sans-serif",
-          boxShadow: "0 4px 20px rgba(34,197,94,0.4)", cursor: "pointer",
-        }} onClick={() => { if (toastTimer.current) clearTimeout(toastTimer.current); setToast(""); }}>{toast}</div>
+          boxShadow: "0 4px 20px rgba(34,197,94,0.4)",
+        }}>{toast}</div>
       )}
 
       {/* Inline Report Viewer */}
@@ -364,7 +364,7 @@ function NeuroStimLog() {
             settings={settings} onUpdateSettings={setSettings}
             maHistory={maHistory} onMaHistoryChange={setMaHistory}
             records={records} onRecordsChange={setRecords}
-            intakes={intakes} showToast={showToast} onStartNew={startNew}
+            intakes={intakes} onIntakesChange={setIntakes} showToast={showToast} onStartNew={startNew}
           />
         )}
       </div>
