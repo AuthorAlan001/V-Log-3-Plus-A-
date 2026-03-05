@@ -38,10 +38,46 @@
   <!-- Shared module: Storage, constants, utilities (plain JS, no Babel needed) -->
   <script src="shared.js"></script>
 
-  <!-- Service Worker registration -->
+  <!-- Service Worker registration with cache-busting and update detection -->
   <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    // updateViaCache: 'none' forces browser to always check network for sw.js changes
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+      .then(function(reg) {
+        // Check for updates on every page load
+        reg.update().catch(function() {});
+
+        // Detect when a new SW is waiting to activate
+        function onNewSW(worker) {
+          window._swWaiting = worker;
+          window.dispatchEvent(new Event('sw-update-available'));
+        }
+
+        if (reg.waiting) {
+          onNewSW(reg.waiting);
+        }
+
+        reg.addEventListener('updatefound', function() {
+          var newWorker = reg.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', function() {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                onNewSW(newWorker);
+              }
+            });
+          }
+        });
+
+        // Reload when the new SW takes over
+        var refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function() {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
+        });
+      })
+      .catch(function() {});
   }
   </script>
 

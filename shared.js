@@ -1,23 +1,115 @@
 // ═══════════════════════════════════════════════════
 // SHARED.JS — Storage, Constants, Data, Utilities
-// Neuro-Stim Voiding Diary v3.0
+// V Log Plus — Neuro-Stim Voiding Diary v3.1.0
 // ═══════════════════════════════════════════════════
+
+// ── App Version (single source of truth) ──
+window.APP_VERSION = "3.1.0";
 
 // ── IndexedDB Storage Shim ──
 (function() {
-  const DB_NAME = 'neuro-stim-db';
+  const DB_NAME = 'vlog-plus-db';
+  const OLD_DB_NAME = 'neuro-stim-db';
   const STORE_NAME = 'kv';
+  const MIGRATION_KEY = '_migrated-from-neuro-stim';
   let db = null;
+
+  function openNamedDB(name) {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(name, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
 
   function openDB() {
     return new Promise((resolve, reject) => {
       if (db) { resolve(db); return; }
-      const req = indexedDB.open(DB_NAME, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME);
-      req.onsuccess = () => { db = req.result; resolve(db); };
-      req.onerror = () => reject(req.error);
+      openNamedDB(DB_NAME).then(d => { db = d; resolve(db); }).catch(reject);
     });
   }
+
+  // One-time migration: copy all data from old 'neuro-stim-db' to new 'vlog-plus-db'
+  window._migrateFromOldDB = async function() {
+    try {
+      const newDB = await openDB();
+      // Check if already migrated
+      const checkTx = newDB.transaction(STORE_NAME, 'readonly');
+      const checkReq = checkTx.objectStore(STORE_NAME).get(MIGRATION_KEY);
+      const alreadyDone = await new Promise(resolve => {
+        checkReq.onsuccess = () => resolve(checkReq.result !== undefined);
+        checkReq.onerror = () => resolve(false);
+      });
+      if (alreadyDone) return { migrated: false, reason: 'already done' };
+
+      // Check if new DB already has real data (e.g. user already started using 3.1)
+      const keysTx = newDB.transaction(STORE_NAME, 'readonly');
+      const keysReq = keysTx.objectStore(STORE_NAME).getAllKeys();
+      const existingKeys = await new Promise(resolve => {
+        keysReq.onsuccess = () => resolve(keysReq.result || []);
+        keysReq.onerror = () => resolve([]);
+      });
+      if (existingKeys.length > 0) {
+        // Mark as migrated so we don't check again
+        const markTx = newDB.transaction(STORE_NAME, 'readwrite');
+        markTx.objectStore(STORE_NAME).put(true, MIGRATION_KEY);
+        return { migrated: false, reason: 'new db already has data' };
+      }
+
+      // Try to open old DB and read all data
+      let oldDB;
+      try { oldDB = await openNamedDB(OLD_DB_NAME); } catch(e) {
+        return { migrated: false, reason: 'old db not found' };
+      }
+
+      const readTx = oldDB.transaction(STORE_NAME, 'readonly');
+      const store = readTx.objectStore(STORE_NAME);
+      const allKeys = await new Promise((resolve, reject) => {
+        const req = store.getAllKeys();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+
+      if (allKeys.length === 0) {
+        oldDB.close();
+        const markTx = newDB.transaction(STORE_NAME, 'readwrite');
+        markTx.objectStore(STORE_NAME).put(true, MIGRATION_KEY);
+        return { migrated: false, reason: 'old db empty' };
+      }
+
+      // Read all values from old DB
+      const allData = [];
+      for (const key of allKeys) {
+        const val = await new Promise((resolve, reject) => {
+          const rTx = oldDB.transaction(STORE_NAME, 'readonly');
+          const req = rTx.objectStore(STORE_NAME).get(key);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+        allData.push({ key, value: val });
+      }
+      oldDB.close();
+
+      // Write all data to new DB
+      const writeTx = newDB.transaction(STORE_NAME, 'readwrite');
+      const writeStore = writeTx.objectStore(STORE_NAME);
+      for (const item of allData) {
+        writeStore.put(item.value, item.key);
+      }
+      writeStore.put(true, MIGRATION_KEY);
+      await new Promise((resolve, reject) => {
+        writeTx.oncomplete = () => resolve();
+        writeTx.onerror = () => reject(writeTx.error);
+      });
+
+      console.log('[V Log Plus] Migrated ' + allData.length + ' keys from ' + OLD_DB_NAME);
+      return { migrated: true, count: allData.length };
+    } catch(e) {
+      console.warn('[V Log Plus] Migration failed (non-fatal):', e);
+      return { migrated: false, reason: 'error', error: e };
+    }
+  };
 
   window.storage = {
     async get(key) {
@@ -62,9 +154,6 @@
     }
   };
 })();
-
-// ── App Version ──
-window.APP_VERSION = "3.0";
 
 // ── Storage Keys ──
 window.STORAGE_KEY = "neuro-log-records-v2";

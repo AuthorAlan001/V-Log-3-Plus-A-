@@ -1,4 +1,12 @@
-const CACHE_NAME = 'neuro-stim-v3';
+// ═══════════════════════════════════════════════════
+// SW.JS — Service Worker
+// V Log Plus v3.1.0
+// Cache name derived from version — bump this when deploying
+// ═══════════════════════════════════════════════════
+
+const SW_VERSION = '3.1.0';
+const CACHE_NAME = 'vlog-plus-v' + SW_VERSION;
+
 const ASSETS = [
   './',
   './index.html',
@@ -45,4 +53,11 @@ self.addEventListener('fetch', event => {
       .then(cached => cached || fetch(event.request))
       .catch(() => caches.match('./index.html'))
   );
+});
+
+// Listen for skip-waiting message from the app
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

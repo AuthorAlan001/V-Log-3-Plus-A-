@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════
 // STATS-VIEW.JS — Charts & Clinical Summary
 // Scatter plot urge chart, tolerance, volume
+// V Log Plus v3.1.0
 // ═══════════════════════════════════════════════════
 
 const { ResponsiveContainer, ComposedChart, LineChart, Line, BarChart, Bar, ScatterChart, Scatter,
@@ -46,6 +47,7 @@ window.StatsView = function StatsView({ records, settings, maHistory, intakes })
     initUrge: safeNum(r.initUrge),
     finalUrge: safeNum(r.finalUrge),
     deferral: safeNum(r.deferral),
+    mA: safeNum(r.mA, 0.7),
   }));
 
   // Tolerance stats
@@ -209,18 +211,21 @@ window.StatsView = function StatsView({ records, settings, maHistory, intakes })
         </div>
       )}
 
-      {/* Chart: Volume per void */}
+      {/* Chart: Volume per void with mA overlay */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Volume per Void (ml)</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Volume per Void & mA Setting</div>
         <div style={{ background: "rgba(30,41,59,0.5)", borderRadius: 14, padding: "12px 4px 4px 0" }}>
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={timelineData}>
+          <ResponsiveContainer width="100%" height={200}>
+            <ComposedChart data={timelineData}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,120,160,0.15)" />
               <XAxis dataKey="label" tick={{ fill: "#64748b", fontSize: 9 }} interval={Math.max(0, Math.floor(timelineData.length / 6))} />
-              <YAxis tick={{ fill: "#64748b", fontSize: 10 }} width={40} />
+              <YAxis yAxisId="vol" tick={{ fill: "#64748b", fontSize: 10 }} width={40} />
+              <YAxis yAxisId="ma" orientation="right" domain={[0, 3]} tick={{ fill: "#a78bfa", fontSize: 10 }} width={35} />
               <Tooltip {...chartTooltipStyle} />
-              <Line type="monotone" dataKey="volume" stroke="#22c55e" strokeWidth={2} dot={{ r: 3, fill: "#22c55e" }} name="Volume (ml)" />
-            </LineChart>
+              <Legend wrapperStyle={{ fontSize: 11, color: "#94a3b8" }} />
+              <Line yAxisId="vol" type="monotone" dataKey="volume" stroke="#22c55e" strokeWidth={2} dot={{ r: 3, fill: "#22c55e" }} name="Volume (ml)" />
+              <Line yAxisId="ma" type="stepAfter" dataKey="mA" stroke="#a78bfa" strokeWidth={2} strokeDasharray="5 3" dot={false} name="mA" />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>

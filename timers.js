@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════
 // TIMERS.JS — Persistent Timer Engine & UI Strip
 // Up to 3 concurrent timers, survives app close/screen off
+// V Log Plus v3.1.0
 // ═══════════════════════════════════════════════════
 
 // Common timer presets for quick-start
@@ -10,6 +11,28 @@ const TIMER_PRESETS = [
   { label: "Custom", direction: "up" },
 ];
 
+// ── Chime: Web Audio API tone (no audio file needed, works offline) ──
+function playChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [659.25, 783.99, 987.77]; // E5, G5, B5 — pleasant major triad
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.5);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + i * 0.15);
+      osc.stop(ctx.currentTime + i * 0.15 + 0.5);
+    });
+    // Clean up context after sounds finish
+    setTimeout(() => ctx.close().catch(() => {}), 2000);
+  } catch(e) { /* Audio not available — silent fallback */ }
+}
+
 // ── TimerStrip: Collapsible bar showing active timers ──
 window.TimerStrip = function TimerStrip({ timers, onTimersChange, showToast }) {
   const [tick, setTick] = useState(0);
@@ -18,14 +41,37 @@ window.TimerStrip = function TimerStrip({ timers, onTimersChange, showToast }) {
   const [newDirection, setNewDirection] = useState("up");
   const [newDuration, setNewDuration] = useState("");
   const tickRef = useRef(null);
+  const chimedRef = useRef(new Set()); // Track which timers have already chimed
 
-  // Tick every second to update displays
+  // Tick every second to update displays and check for expirations
   useEffect(() => {
     if (timers.length > 0) {
-      tickRef.current = setInterval(() => setTick(t => t + 1), 1000);
+      tickRef.current = setInterval(() => {
+        setTick(t => t + 1);
+        // Check for newly expired countdown timers
+        timers.forEach(timer => {
+          if (timer.direction === "down" && timer.durationSeconds && !chimedRef.current.has(timer.id)) {
+            const started = new Date(timer.startedAt).getTime();
+            const elapsedSec = Math.floor((Date.now() - started) / 1000);
+            const remaining = timer.durationSeconds - elapsedSec;
+            if (remaining <= 0) {
+              chimedRef.current.add(timer.id);
+              playChime();
+            }
+          }
+        });
+      }, 1000);
     }
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
-  }, [timers.length]);
+  }, [timers]);
+
+  // Clean up chimed set when timers are removed
+  useEffect(() => {
+    const activeIds = new Set(timers.map(t => t.id));
+    chimedRef.current.forEach(id => {
+      if (!activeIds.has(id)) chimedRef.current.delete(id);
+    });
+  }, [timers]);
 
   const addTimer = async () => {
     if (timers.length >= 3) { showToast("Max 3 timers"); return; }
