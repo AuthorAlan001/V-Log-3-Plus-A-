@@ -27,7 +27,9 @@ window.ReportView = function ReportView({
   const avgInitUrge = rpt.length > 0 ? (rpt.reduce((s, r) => s + safeNum(r.initUrge), 0) / rpt.length).toFixed(1) : 0;
   const currentMa = maHistory.length > 0 ? maHistory[maHistory.length - 1].mA : settings.mA;
   const totalFluidIn = intakes.filter(i => i.category === "Drink").reduce((s, i) => s + safeNum(i.amount), 0);
-  const avgDailyFluid = totalDays > 0 && totalFluidIn > 0 ? Math.round(totalFluidIn / totalDays) : "—";
+  const daysWithFluid = new Set(intakes.filter(i => i.category === "Drink" && safeNum(i.amount) > 0).map(i => i.date)).size;
+  const avgDailyFluid = daysWithFluid > 0 ? Math.round(totalFluidIn / daysWithFluid) : "—";
+  const fluidPartial = daysWithFluid > 0 && daysWithFluid < totalDays;
 
   // Tolerance
   const targetDef = safeNum(settings.targetDeferral, 5);
@@ -302,9 +304,10 @@ window.ReportView = function ReportView({
       <div class="metric"><div class="label">Avg Deferral</div><div class="value">${avgDeferral}${avgDeferral !== "N/A" ? " min" : ""}</div></div>
       <div class="metric"><div class="label">Tolerance Met</div><div class="value">${tolerancePct}% (target: ${targetDef} min)</div></div>
       <div class="metric"><div class="label">Current mA</div><div class="value">${currentMa} mA</div></div>
-      <div class="metric"><div class="label">Avg Daily Fluid In</div><div class="value">${avgDailyFluid}${avgDailyFluid !== "—" ? " ml" : ""}</div></div>
+      <div class="metric"><div class="label">Avg Daily Fluid In</div><div class="value">${avgDailyFluid !== "—" ? avgDailyFluid + " ml" + (fluidPartial ? "*" : "") : "—"}</div></div>
     </div>
 
+    ${fluidPartial ? `<p style="font-size:11px;color:#64748b;margin-top:4px;">* Average computed from days with recorded data only (${daysWithFluid} of ${totalDays} days). Fluid intake tracking was not available for the full report period.</p>` : ""}
     <h2>Stimulation Setting History</h2>
     ${maHistory.length > 0 ? maHistory.map(h =>
       `<div class="ma-change"><strong>${h.mA} mA</strong> (${h.mode}) — ${new Date(h.date+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})} <span style="font-size:12px;color:#64748b;">${h.notes || ""}</span></div>`
