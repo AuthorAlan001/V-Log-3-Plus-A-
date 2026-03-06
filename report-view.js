@@ -6,6 +6,7 @@
 window.ReportView = function ReportView({
   records, settings, maHistory, intakes, filters, onFiltersChange,
   doctorNotes, onDoctorNotesChange, showToast, onShowReport,
+  providerConfig,
 }) {
   const [noteText, setNoteText] = useState("");
   const filtered = applyFilters(records, filters);
@@ -281,6 +282,18 @@ window.ReportView = function ReportView({
       Neuro-Stimulation Voiding Diary — Report Preview
     </div>
     <h1>Neuro-Stimulation Voiding Diary Report</h1>
+    ${providerConfig && providerConfig.preparedFor ? `
+    <div style="margin:12px 0 16px;padding:14px 18px;background:#f0f9ff;border:1px solid #bfdbfe;border-radius:8px;">
+      <div style="font-size:13px;color:#334155;line-height:1.8;">
+        This prototype has been prepared specifically for <strong>${providerConfig.preparedFor.replace(/</g,'&lt;')}</strong>
+        by Dr. <strong>${providerConfig.preparedBy.replace(/</g,'&lt;')}</strong>.
+        This configuration has been reviewed by <strong>${providerConfig.reviewedBy.replace(/</g,'&lt;')}</strong>.
+      </div>
+      <div style="font-size:12px;color:#64748b;margin-top:6px;">
+        If you have questions or concerns, please contact <strong>${providerConfig.contact.replace(/</g,'&lt;')}</strong>.
+      </div>
+    </div>
+    ` : ''}
     <p style="color:#64748b;font-size:13px;">
       Report Period: ${new Date(dateRange.from+"T00:00:00").toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}
       – ${new Date(dateRange.to+"T00:00:00").toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}
@@ -310,7 +323,7 @@ window.ReportView = function ReportView({
     ${fluidPartial ? `<p style="font-size:11px;color:#64748b;margin-top:4px;">* Average computed from days with recorded data only (${daysWithFluid} of ${totalDays} days). Fluid intake tracking was not available for the full report period.</p>` : ""}
     <h2>Stimulation Setting History</h2>
     ${maHistory.length > 0 ? maHistory.map(h =>
-      `<div class="ma-change"><strong>${h.mA} mA</strong> (${h.mode}) — ${new Date(h.date+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})} <span style="font-size:12px;color:#64748b;">${h.notes || ""}</span></div>`
+      `<div class="ma-change"><strong>${h.mA} mA</strong> (${h.mode}) — ${new Date(h.date+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}${h.time ? " at " + fmtTime(h.time) : ""} <span style="font-size:12px;color:#64748b;">${h.notes || ""}</span></div>`
     ).join("") : "<p>No changes recorded</p>"}
 
     <h2>Charts</h2>
@@ -446,6 +459,7 @@ window.ReportView = function ReportView({
           }}>
             <span style={{ color: "#94a3b8", fontSize: 12 }}>
               {new Date(h.date+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+              {h.time && <span style={{ color: "#64748b" }}> {fmtTime(h.time)}</span>}
             </span>
             <span style={{ fontSize: 12 }}>
               <span style={{ color: "#a78bfa", fontWeight: 700 }}>{h.mA} mA</span>

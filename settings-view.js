@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════
 // SETTINGS-VIEW.JS — App Settings & Data Management
 // Smart CSV import with header detection & validation
-// v3.2 — Comprehensive error handling
+// v3.3 — Admin mode, provider config, comprehensive error handling
 // ═══════════════════════════════════════════════════
 
 // Chime repeat interval presets (seconds)
@@ -130,9 +130,96 @@ window.SettingsView = function SettingsView({
   settings, onUpdateSettings, maHistory, onMaHistoryChange, records, onRecordsChange,
   intakes, onIntakesChange, doctorNotes, onDoctorNotesChange, timers, onTimersChange,
   showToast, onStartNew,
+  adminMode, onAdminModeChange, providerConfig, onProviderConfigChange,
 }) {
   const [editingMa, setEditingMa] = useState(null);
-  const [maForm, setMaForm] = useState({ date: "", mA: 0.7, mode: "Awake", notes: "" });
+  const [maForm, setMaForm] = useState({ date: "", time: "", mA: 0.7, mode: "Awake", notes: "" });
+
+  // ── 5-tap admin trigger ──
+  const tapCountRef = useRef(0);
+  const tapTimerRef = useRef(null);
+  const [showPasswordInput, setShowPasswordInput] = useState(false);
+  const [passwordVal, setPasswordVal] = useState("");
+  const passwordInputRef = useRef(null);
+
+  // ── Provider config form ──
+  const [provForm, setProvForm] = useState({
+    preparedFor: "", preparedBy: "", reviewedBy: "", contact: "",
+  });
+  const [showProviderForm, setShowProviderForm] = useState(false);
+
+  // Load provider config into form when available
+  useEffect(() => {
+    if (providerConfig) {
+      setProvForm({
+        preparedFor: providerConfig.preparedFor || "",
+        preparedBy: providerConfig.preparedBy || "",
+        reviewedBy: providerConfig.reviewedBy || "",
+        contact: providerConfig.contact || "",
+      });
+    }
+  }, [providerConfig]);
+
+  const handleVersionTap = () => {
+    tapCountRef.current++;
+    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+    if (tapCountRef.current >= 5) {
+      tapCountRef.current = 0;
+      if (adminMode) {
+        // Already in admin mode — deactivate
+        onAdminModeChange(false);
+        showToast("Session reset");
+      } else {
+        setShowPasswordInput(true);
+        setPasswordVal("");
+        setTimeout(() => {
+          if (passwordInputRef.current) passwordInputRef.current.focus();
+        }, 100);
+      }
+      return;
+    }
+    tapTimerRef.current = setTimeout(() => { tapCountRef.current = 0; }, 2000);
+  };
+
+  const handlePasswordSubmit = async () => {
+    const ok = await checkAdminPassword(passwordVal);
+    if (ok) {
+      onAdminModeChange(true);
+      setShowPasswordInput(false);
+      setPasswordVal("");
+      showToast("Extended mode activated");
+    } else {
+      showToast("Invalid");
+      setPasswordVal("");
+    }
+  };
+
+  const handleProviderSave = async () => {
+    const f = provForm;
+    const anyFilled = f.preparedFor || f.preparedBy || f.reviewedBy || f.contact;
+    const allFilled = f.preparedFor && f.preparedBy && f.reviewedBy && f.contact;
+    if (anyFilled && !allFilled) {
+      showToast("All four fields are required if any field is filled");
+      return;
+    }
+    if (!anyFilled) {
+      // Clear provider config
+      await saveProviderConfig(null);
+      onProviderConfigChange(null);
+      showToast("Provider configuration cleared");
+    } else {
+      const cfg = {
+        preparedFor: f.preparedFor.trim(),
+        preparedBy: f.preparedBy.trim(),
+        reviewedBy: f.reviewedBy.trim(),
+        contact: f.contact.trim(),
+      };
+      await saveProviderConfig(cfg);
+      onProviderConfigChange(cfg);
+      showToast("Provider configuration saved");
+    }
+    setShowProviderForm(false);
+  };
 
   const updateSetting = async (key, val) => {
     try {
@@ -464,7 +551,94 @@ window.SettingsView = function SettingsView({
 
   return (
     <>
-      <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", marginBottom: 16 }}>Settings</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>Settings</div>
+        <span onClick={handleVersionTap} style={{
+          fontSize: 11, color: "#475569", cursor: "default",
+          userSelect: "none", WebkitUserSelect: "none",
+          padding: "4px 8px",
+        }}>v{APP_VERSION}</span>
+      </div>
+
+      {/* Password input (hidden until 5-tap) */}
+      {showPasswordInput && (
+        <div style={{
+          padding: "12px", borderRadius: 10, background: "rgba(30,41,59,0.6)",
+          marginBottom: 16, border: "1px solid rgba(100,120,160,0.2)",
+        }}>
+          <input ref={passwordInputRef} type="password" value={passwordVal}
+            onChange={e => setPasswordVal(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handlePasswordSubmit(); }}
+            placeholder="Enter code..."
+            style={{ ...inputStyle, padding: "8px 12px", fontSize: 14, marginBottom: 8 }} />
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={handlePasswordSubmit} style={{
+              flex: 1, padding: 8, borderRadius: 8, border: "none",
+              background: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}>OK</button>
+            <button onClick={() => { setShowPasswordInput(false); setPasswordVal(""); }} style={{
+              padding: "8px 14px", borderRadius: 8, border: "none",
+              background: "rgba(100,120,160,0.12)", color: "#94a3b8", fontSize: 13, cursor: "pointer",
+            }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Admin Mode: Provider Configuration ═══ */}
+      {adminMode && (
+        <div style={{
+          marginBottom: 20, padding: "14px", borderRadius: 12,
+          background: "rgba(190,60,120,0.08)",
+          border: "1px solid rgba(190,60,120,0.2)",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0" }}>Provider Configuration</div>
+            <button onClick={() => setShowProviderForm(!showProviderForm)} style={{
+              padding: "4px 12px", borderRadius: 8, border: "none",
+              background: showProviderForm ? "rgba(239,68,68,0.15)" : "rgba(59,130,246,0.15)",
+              color: showProviderForm ? "#ef4444" : "#60a5fa",
+              fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}>{showProviderForm ? "Cancel" : (providerConfig ? "Edit" : "+ Configure")}</button>
+          </div>
+
+          {providerConfig && !showProviderForm && (
+            <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.8 }}>
+              <div>This prototype has been prepared specifically for <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedFor}</strong> by Dr. <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedBy}</strong>.</div>
+              <div>This configuration has been reviewed by <strong style={{ color: "#e2e8f0" }}>{providerConfig.reviewedBy}</strong>.</div>
+              <div>If you have questions or concerns, please contact <strong style={{ color: "#e2e8f0" }}>{providerConfig.contact}</strong>.</div>
+            </div>
+          )}
+
+          {showProviderForm && (
+            <div>
+              <Field label="Prepared specifically for">
+                <input value={provForm.preparedFor} onChange={e => setProvForm(f => ({...f, preparedFor: e.target.value}))}
+                  placeholder="Patient name..." style={{ ...inputStyle, padding: "8px 12px", fontSize: 13 }} />
+              </Field>
+              <Field label="Prepared by (Dr.)">
+                <input value={provForm.preparedBy} onChange={e => setProvForm(f => ({...f, preparedBy: e.target.value}))}
+                  placeholder="Doctor name..." style={{ ...inputStyle, padding: "8px 12px", fontSize: 13 }} />
+              </Field>
+              <Field label="Reviewed by">
+                <input value={provForm.reviewedBy} onChange={e => setProvForm(f => ({...f, reviewedBy: e.target.value}))}
+                  placeholder="Reviewer name..." style={{ ...inputStyle, padding: "8px 12px", fontSize: 13 }} />
+              </Field>
+              <Field label="Contact (phone or email)">
+                <input value={provForm.contact} onChange={e => setProvForm(f => ({...f, contact: e.target.value}))}
+                  placeholder="Phone number or email..." style={{ ...inputStyle, padding: "8px 12px", fontSize: 13 }} />
+              </Field>
+              <div style={{ fontSize: 11, color: "#475569", marginBottom: 10 }}>
+                If any field is filled, all four fields are required. Leave all blank to clear.
+              </div>
+              <button onClick={handleProviderSave} style={{
+                width: "100%", padding: 10, borderRadius: 10, border: "none",
+                background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+                color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer",
+              }}>Save Configuration</button>
+            </div>
+          )}
+        </div>
+      )}
 
       <Field label={`Default mA: ${settings.mA}`}>
         <input type="range" min="0" max="3" step="0.1" value={settings.mA}
@@ -567,7 +741,7 @@ window.SettingsView = function SettingsView({
       <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(100,120,160,0.15)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0" }}>mA History</div>
-          <button onClick={() => { setEditingMa("new"); setMaForm({ date: localDate(), mA: settings.mA, mode: settings.mode, notes: "" }); }} style={{
+          <button onClick={() => { setEditingMa("new"); setMaForm({ date: localDate(), time: localTime(), mA: settings.mA, mode: settings.mode, notes: "" }); }} style={{
             padding: "6px 12px", borderRadius: 8, border: "none",
             background: "rgba(34,197,94,0.15)", color: "#22c55e", fontSize: 12, fontWeight: 600, cursor: "pointer",
           }}>+ Add</button>
@@ -580,6 +754,8 @@ window.SettingsView = function SettingsView({
                 <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                   <input type="date" value={maForm.date} onChange={e => setMaForm(f => ({...f, date: e.target.value}))}
                     style={{ ...inputStyle, flex: 1, padding: "6px 8px", fontSize: 13 }} />
+                  <input type="time" value={maForm.time || ""} onChange={e => setMaForm(f => ({...f, time: e.target.value}))}
+                    style={{ ...inputStyle, width: 100, padding: "6px 8px", fontSize: 13 }} />
                   <input type="number" step="0.1" value={maForm.mA} onChange={e => setMaForm(f => ({...f, mA: parseFloat(e.target.value) || 0}))}
                     style={{ ...inputStyle, width: 70, padding: "6px 8px", fontSize: 13 }} />
                 </div>
@@ -602,8 +778,11 @@ window.SettingsView = function SettingsView({
                 </div>
               </div>
             ) : (
-              <div onClick={() => { setEditingMa(i); setMaForm({...h}); }} style={{ display: "flex", justifyContent: "space-between", cursor: "pointer" }}>
-                <span style={{ color: "#94a3b8", fontSize: 13 }}>{new Date(h.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+              <div onClick={() => { setEditingMa(i); setMaForm({...h, time: h.time || ""}); }} style={{ display: "flex", justifyContent: "space-between", cursor: "pointer" }}>
+                <span style={{ color: "#94a3b8", fontSize: 13 }}>
+                  {new Date(h.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  {h.time && <span style={{ color: "#64748b" }}> {fmtTime(h.time)}</span>}
+                </span>
                 <span style={{ fontSize: 13 }}>
                   <span style={{ color: "#a78bfa", fontWeight: 700 }}>{h.mA} mA</span>
                   <span style={{ color: "#64748b" }}> · {h.mode}</span>
@@ -619,6 +798,8 @@ window.SettingsView = function SettingsView({
             <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
               <input type="date" value={maForm.date} onChange={e => setMaForm(f => ({...f, date: e.target.value}))}
                 style={{ ...inputStyle, flex: 1, padding: "6px 8px", fontSize: 13 }} />
+              <input type="time" value={maForm.time || ""} onChange={e => setMaForm(f => ({...f, time: e.target.value}))}
+                style={{ ...inputStyle, width: 100, padding: "6px 8px", fontSize: 13 }} />
               <input type="number" step="0.1" value={maForm.mA} onChange={e => setMaForm(f => ({...f, mA: parseFloat(e.target.value) || 0}))}
                 style={{ ...inputStyle, width: 70, padding: "6px 8px", fontSize: 13 }} />
             </div>
@@ -631,7 +812,7 @@ window.SettingsView = function SettingsView({
             <div style={{ display: "flex", gap: 6 }}>
               <button onClick={async () => {
                 if (!maForm.date) { showToast("Date is required for mA history entry"); return; }
-                try { const updated = [...maHistory, {...maForm}].sort((a, b) => a.date.localeCompare(b.date)); onMaHistoryChange(updated); await saveMaHistory(updated); setEditingMa(null); showToast("mA entry added"); }
+                try { const updated = [...maHistory, {...maForm}].sort((a, b) => ((a.date||"")+(a.time||"")).localeCompare((b.date||"")+(b.time||""))); onMaHistoryChange(updated); await saveMaHistory(updated); setEditingMa(null); showToast("mA entry added"); }
                 catch (e) { showToast("Could not save new mA entry — please try again"); }
               }} style={{ flex: 1, padding: 8, borderRadius: 8, border: "none", background: "#22c55e", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Add</button>
               <button onClick={() => setEditingMa(null)} style={{ padding: 8, borderRadius: 8, border: "none", background: "rgba(100,120,160,0.12)", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Cancel</button>

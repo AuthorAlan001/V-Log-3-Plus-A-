@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════
 // SW.JS — Service Worker with Version-Aware Caching
-// Neuro-Stim Voiding Diary v3.2
+// Neuro-Stim Voiding Diary v0.9
 // ═══════════════════════════════════════════════════
 
 // Version must match APP_VERSION in shared.js
-const SW_VERSION = '3.2';
+const SW_VERSION = '0.9';
 const CACHE_NAME = 'vlog-plus-v' + SW_VERSION;
 
 const ASSETS = [

@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════
 // SHARED.JS — Storage, Constants, Data, Utilities
-// Neuro-Stim Voiding Diary v3.2
+// Neuro-Stim Voiding Diary v0.9
 // ═══════════════════════════════════════════════════
 
 // ── IndexedDB Storage Shim ──
@@ -142,7 +142,7 @@
 })();
 
 // ── App Version ──
-window.APP_VERSION = "3.2";
+window.APP_VERSION = "0.9";
 
 // ── Storage Keys ──
 window.STORAGE_KEY = "neuro-log-records-v2";
@@ -152,6 +152,10 @@ window.MA_HISTORY_KEY = "neuro-log-ma-history-v2";
 window.INTAKE_KEY = "neuro-log-intake-v1";
 window.DOCTOR_NOTES_KEY = "neuro-log-doctor-notes-v1";
 window.TIMERS_KEY = "neuro-log-active-timers-v1";
+window.PROVIDER_CONFIG_KEY = "neuro-log-provider-config-v1";
+
+// Admin mode password hash (SHA-256) — verified via Web Crypto API
+window.ADMIN_HASH = "7626dc723b583a2c5d06ec6551785910510a08e362b7865f0ab0312e0e9a7820";
 
 // ── Configuration ──
 window.CONFIG = {
@@ -466,6 +470,37 @@ window.loadTimers = async function() {
 
 window.saveTimers = async function(timers) {
   try { await window.storage.set(TIMERS_KEY, JSON.stringify(timers)); } catch(e) {}
+};
+
+// ── Admin Password Verification (SHA-256 via Web Crypto) ──
+window.checkAdminPassword = async function(password) {
+  try {
+    var encoder = new TextEncoder();
+    var data = encoder.encode(password);
+    var hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    var hashArray = Array.from(new Uint8Array(hashBuffer));
+    var hashHex = hashArray.map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+    return hashHex === ADMIN_HASH;
+  } catch(e) { return false; }
+};
+
+// ── Provider Configuration ──
+window.loadProviderConfig = async function() {
+  try {
+    var r = await window.storage.get(PROVIDER_CONFIG_KEY);
+    if (r) return JSON.parse(r.value);
+    return null;
+  } catch(e) { return null; }
+};
+
+window.saveProviderConfig = async function(config) {
+  try {
+    if (config) {
+      await window.storage.set(PROVIDER_CONFIG_KEY, JSON.stringify(config));
+    } else {
+      await window.storage.delete(PROVIDER_CONFIG_KEY);
+    }
+  } catch(e) {}
 };
 
 // ═══════════════════════════════════════════════════

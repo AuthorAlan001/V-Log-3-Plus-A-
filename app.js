@@ -18,6 +18,8 @@ function NeuroStimLog() {
   const [timers, setTimers] = useState([]);
   const [downloadInfo, setDownloadInfo] = useState(null);
   const [updateReady, setUpdateReady] = useState(false);
+  const [adminMode, setAdminMode] = useState(false);
+  const [providerConfig, setProviderConfig] = useState(null);
   const toastTimer = useRef(null);
 
   const showToast = useCallback((msg) => {
@@ -63,6 +65,13 @@ function NeuroStimLog() {
       setIntakes(ints);
       setDoctorNotes(notes);
       setTimers(tmrs);
+
+      // Load provider configuration (if any)
+      try {
+        var pc = await loadProviderConfig();
+        if (pc) setProviderConfig(pc);
+      } catch(e) {}
+
       if (recs.length > 0) {
         setCurrentIdx(recs.length - 1);
         setForm(recs[recs.length - 1]);
@@ -179,7 +188,12 @@ function NeuroStimLog() {
   );
 
   return (
-    <div style={containerStyle}>
+    <div style={{
+      ...containerStyle,
+      background: adminMode
+        ? "linear-gradient(180deg, #3d1a2e 0%, #2e1a2a 100%)"
+        : containerStyle.background,
+    }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
       {/* ── UPDATE AVAILABLE BANNER ── */}
@@ -263,6 +277,25 @@ function NeuroStimLog() {
 
       {/* ── Timer Strip ── */}
       <TimerStrip timers={timers} onTimersChange={setTimers} showToast={showToast} settings={settings} />
+
+      {/* ── Provider Info Banner (when configured) ── */}
+      {providerConfig && providerConfig.preparedFor && (
+        <div style={{
+          padding: "6px 16px",
+          background: "rgba(59,130,246,0.08)",
+          borderBottom: "1px solid rgba(59,130,246,0.15)",
+          fontSize: 11, color: "#94a3b8",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <span>Prepared for <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedFor}</strong></span>
+          {providerConfig.contact && (
+            <a href={providerConfig.contact.includes("@") ? "mailto:" + providerConfig.contact : "tel:" + providerConfig.contact}
+              style={{ color: "#60a5fa", fontSize: 11, textDecoration: "none" }}>
+              Contact
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (
@@ -356,6 +389,7 @@ function NeuroStimLog() {
             intakes={intakes} filters={filters} onFiltersChange={setFilters}
             doctorNotes={doctorNotes} onDoctorNotesChange={setDoctorNotes}
             showToast={showToast} onShowReport={(html) => setDownloadInfo({ html })}
+            providerConfig={providerConfig}
           />
         )}
 
@@ -368,6 +402,8 @@ function NeuroStimLog() {
             doctorNotes={doctorNotes} onDoctorNotesChange={setDoctorNotes}
             timers={timers} onTimersChange={setTimers}
             showToast={showToast} onStartNew={startNew}
+            adminMode={adminMode} onAdminModeChange={setAdminMode}
+            providerConfig={providerConfig} onProviderConfigChange={setProviderConfig}
           />
         )}
       </div>
