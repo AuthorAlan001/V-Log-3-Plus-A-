@@ -20,6 +20,11 @@ function NeuroStimLog() {
   const [updateReady, setUpdateReady] = useState(false);
   const [adminMode, setAdminMode] = useState(false);
   const [providerConfig, setProviderConfig] = useState(null);
+  const [navAdminPrompt, setNavAdminPrompt] = useState(false);
+  const [navPwVal, setNavPwVal] = useState("");
+  const navTapCountRef = useRef(0);
+  const navTapTimerRef = useRef(null);
+  const navPwInputRef = useRef(null);
   const toastTimer = useRef(null);
 
   const showToast = useCallback((msg) => {
@@ -27,6 +32,41 @@ function NeuroStimLog() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(""), 4000);
   }, []);
+
+  // ── Nav icon 5-tap admin trigger ──
+  const handleNavSettingsTap = () => {
+    if (view === "settings") {
+      navTapCountRef.current++;
+      if (navTapTimerRef.current) clearTimeout(navTapTimerRef.current);
+      if (navTapCountRef.current >= 5) {
+        navTapCountRef.current = 0;
+        if (adminMode) {
+          setAdminMode(false);
+          showToast("Session reset");
+        } else {
+          setNavAdminPrompt(true);
+          setNavPwVal("");
+          setTimeout(() => { if (navPwInputRef.current) navPwInputRef.current.focus(); }, 100);
+        }
+        return;
+      }
+      navTapTimerRef.current = setTimeout(() => { navTapCountRef.current = 0; }, 2000);
+    }
+    setView("settings");
+  };
+
+  const handleNavPwSubmit = async () => {
+    const ok = await checkAdminPassword(navPwVal);
+    if (ok) {
+      setAdminMode(true);
+      setNavAdminPrompt(false);
+      setNavPwVal("");
+      showToast("Extended mode activated");
+    } else {
+      showToast("Invalid");
+      setNavPwVal("");
+    }
+  };
 
   // Listen for SW update
   useEffect(() => {
@@ -248,7 +288,7 @@ function NeuroStimLog() {
           gap: 6,
         }}>
           {TABS.map(tab => (
-            <button key={tab.id} onClick={() => setView(tab.id)} style={{
+            <button key={tab.id} onClick={() => tab.id === "settings" ? handleNavSettingsTap() : setView(tab.id)} style={{
               padding: "10px 0",
               borderRadius: 12,
               border: "none",
@@ -274,6 +314,30 @@ function NeuroStimLog() {
           ))}
         </div>
       </div>
+
+      {/* ── Nav Admin Password Prompt ── */}
+      {navAdminPrompt && (
+        <div style={{
+          padding: "10px 16px",
+          background: "rgba(30,41,59,0.8)",
+          borderBottom: "1px solid rgba(100,120,160,0.2)",
+          display: "flex", gap: 6, alignItems: "center",
+        }}>
+          <input ref={navPwInputRef} type="password" value={navPwVal}
+            onChange={e => setNavPwVal(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleNavPwSubmit(); }}
+            placeholder="Enter code..."
+            style={{ ...inputStyle, flex: 1, padding: "8px 12px", fontSize: 14 }} />
+          <button onClick={handleNavPwSubmit} style={{
+            padding: "8px 14px", borderRadius: 8, border: "none",
+            background: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}>OK</button>
+          <button onClick={() => { setNavAdminPrompt(false); setNavPwVal(""); }} style={{
+            padding: "8px 10px", borderRadius: 8, border: "none",
+            background: "rgba(100,120,160,0.12)", color: "#94a3b8", fontSize: 13, cursor: "pointer",
+          }}>✕</button>
+        </div>
+      )}
 
       {/* ── Timer Strip ── */}
       <TimerStrip timers={timers} onTimersChange={setTimers} showToast={showToast} settings={settings} />
