@@ -364,7 +364,10 @@ function NeuroStimLog() {
             settings={settings} onUpdateSettings={setSettings}
             maHistory={maHistory} onMaHistoryChange={setMaHistory}
             records={records} onRecordsChange={setRecords}
-            intakes={intakes} onIntakesChange={setIntakes} showToast={showToast} onStartNew={startNew}
+            intakes={intakes} onIntakesChange={setIntakes}
+            doctorNotes={doctorNotes} onDoctorNotesChange={setDoctorNotes}
+            timers={timers} onTimersChange={setTimers}
+            showToast={showToast} onStartNew={startNew}
           />
         )}
       </div>

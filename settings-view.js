@@ -128,7 +128,8 @@ function colVal(cols, colMap, field, fallback) {
 
 window.SettingsView = function SettingsView({
   settings, onUpdateSettings, maHistory, onMaHistoryChange, records, onRecordsChange,
-  intakes, onIntakesChange, showToast, onStartNew,
+  intakes, onIntakesChange, doctorNotes, onDoctorNotesChange, timers, onTimersChange,
+  showToast, onStartNew,
 }) {
   const [editingMa, setEditingMa] = useState(null);
   const [maForm, setMaForm] = useState({ date: "", mA: 0.7, mode: "Awake", notes: "" });
@@ -430,20 +431,23 @@ window.SettingsView = function SettingsView({
   // ══════════════════════════════════════════════════
 
   const handleClearAll = async () => {
+    const noteCount = (doctorNotes || []).length;
+    const timerCount = (timers || []).length;
     if (!window.confirm(
       "This will permanently delete:\n" +
       "• " + records.length + " voiding record" + (records.length !== 1 ? "s" : "") + "\n" +
       "• " + intakes.length + " intake record" + (intakes.length !== 1 ? "s" : "") + "\n" +
-      "• All doctor notes and timers\n\n" +
-      "Continue?"
+      (noteCount > 0 ? "• " + noteCount + " doctor note" + (noteCount !== 1 ? "s" : "") + "\n" : "") +
+      (timerCount > 0 ? "• " + timerCount + " active timer" + (timerCount !== 1 ? "s" : "") + "\n" : "") +
+      "\nContinue?"
     )) return;
     if (!window.confirm("This cannot be undone. Are you absolutely sure?")) return;
 
     const errors = [];
     try { onRecordsChange([]); await saveRecords([]); } catch (e) { errors.push("voiding records"); }
     try { if (onIntakesChange) { onIntakesChange([]); await saveIntakes([]); } } catch (e) { errors.push("intake records"); }
-    try { await window.storage.delete(DOCTOR_NOTES_KEY); } catch (e) { /* may not exist */ }
-    try { await window.storage.delete(TIMERS_KEY); } catch (e) { /* may not exist */ }
+    try { await window.storage.delete(DOCTOR_NOTES_KEY); if (onDoctorNotesChange) onDoctorNotesChange([]); } catch (e) { /* may not exist */ }
+    try { await window.storage.delete(TIMERS_KEY); if (onTimersChange) onTimersChange([]); } catch (e) { /* may not exist */ }
     onStartNew();
 
     if (errors.length > 0) {
