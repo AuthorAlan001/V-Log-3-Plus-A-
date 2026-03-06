@@ -345,19 +345,19 @@ function NeuroStimLog() {
       {/* ── Provider Info Banner (when configured) ── */}
       {providerConfig && providerConfig.preparedFor && (
         <div style={{
-          padding: "6px 16px",
+          padding: "10px 16px",
           background: "rgba(59,130,246,0.08)",
           borderBottom: "1px solid rgba(59,130,246,0.15)",
-          fontSize: 11, color: "#94a3b8",
-          display: "flex", justifyContent: "space-between", alignItems: "center",
+          fontSize: 12, color: "#94a3b8", lineHeight: 1.7,
         }}>
-          <span>Prepared for <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedFor}</strong></span>
-          {providerConfig.contact && (
-            <a href={providerConfig.contact.includes("@") ? "mailto:" + providerConfig.contact : "tel:" + providerConfig.contact}
-              style={{ color: "#60a5fa", fontSize: 11, textDecoration: "none" }}>
-              Contact
-            </a>
-          )}
+          <div>This prototype has been prepared specifically for <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedFor}</strong> by Dr. <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedBy}</strong>.</div>
+          <div>This configuration has been reviewed by <strong style={{ color: "#e2e8f0" }}>{providerConfig.reviewedBy}</strong>.</div>
+          <div>If you have questions or concerns, please contact{" "}
+            {providerConfig.contact.includes("@")
+              ? <a href={"mailto:" + providerConfig.contact} style={{ color: "#60a5fa", textDecoration: "none", fontWeight: 600 }}>{providerConfig.contact}</a>
+              : <a href={"tel:" + providerConfig.contact} style={{ color: "#60a5fa", textDecoration: "none", fontWeight: 600 }}>{providerConfig.contact}</a>
+            }.
+          </div>
         </div>
       )}
 
