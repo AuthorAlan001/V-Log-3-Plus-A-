@@ -284,9 +284,9 @@ window.SettingsView = function SettingsView({
       }
 
       const dateRaw = colVal(cols, colMap, 'date', '');
-      const dateVal = dateRaw.slice(0, 10).trim();
-      if (!isValidDate(dateVal)) {
-        skipRow("Invalid date format ('" + dateRaw.slice(0, 20) + "' — expected YYYY-MM-DD)"); return;
+      const dateVal = normalizeDate(dateRaw);
+      if (!dateVal) {
+        skipRow("Invalid/unrecognized date ('" + dateRaw.slice(0, 20) + "' — expected YYYY-MM-DD or M/D/YYYY)"); return;
       }
 
       const timeVal = colVal(cols, colMap, 'time', '');
@@ -368,9 +368,9 @@ window.SettingsView = function SettingsView({
       }
 
       const dateRaw = colVal(cols, colMap, 'date', '');
-      const dateVal = dateRaw.slice(0, 10).trim();
-      if (!isValidDate(dateVal)) {
-        skipRow("Invalid date format ('" + dateRaw.slice(0, 20) + "' — expected YYYY-MM-DD)"); return;
+      const dateVal = normalizeDate(dateRaw);
+      if (!dateVal) {
+        skipRow("Invalid/unrecognized date ('" + dateRaw.slice(0, 20) + "' — expected YYYY-MM-DD or M/D/YYYY)"); return;
       }
 
       const timeVal = colVal(cols, colMap, 'time', '');

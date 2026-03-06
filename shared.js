@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════
 // SHARED.JS — Storage, Constants, Data, Utilities
-// Neuro-Stim Voiding Diary v3.1
+// Neuro-Stim Voiding Diary v3.2
 // ═══════════════════════════════════════════════════
 
 // ── IndexedDB Storage Shim ──
@@ -142,7 +142,7 @@
 })();
 
 // ── App Version ──
-window.APP_VERSION = "3.1";
+window.APP_VERSION = "3.2";
 
 // ── Storage Keys ──
 window.STORAGE_KEY = "neuro-log-records-v2";
@@ -277,6 +277,49 @@ window.fmtTime = function(t) {
   return (hr % 12 || 12) + ":" + m + " " + ampm;
 };
 
+// Normalize any common date format to YYYY-MM-DD
+// Handles: M/D/YYYY, MM/DD/YYYY, YYYY-MM-DD, M-D-YYYY
+// Returns empty string if date cannot be parsed
+window.normalizeDate = function(raw) {
+  if (!raw || typeof raw !== 'string') return "";
+  var s = raw.trim();
+
+  // Already YYYY-MM-DD?
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    var check = new Date(s + "T00:00:00");
+    return isNaN(check.getTime()) ? "" : s;
+  }
+
+  // Try M/D/YYYY or MM/DD/YYYY (with / or - separator)
+  var parts = s.split(/[\/\-]/);
+  if (parts.length === 3) {
+    var a = parseInt(parts[0]), b = parseInt(parts[1]), c = parseInt(parts[2]);
+    // If first part is 4 digits: YYYY-M-D
+    if (parts[0].length === 4 && !isNaN(a) && !isNaN(b) && !isNaN(c)) {
+      var iso = a + "-" + String(b).padStart(2, "0") + "-" + String(c).padStart(2, "0");
+      var d = new Date(iso + "T00:00:00");
+      return isNaN(d.getTime()) ? "" : iso;
+    }
+    // Otherwise M/D/YYYY or M-D-YYYY
+    if (!isNaN(a) && !isNaN(b) && !isNaN(c) && c >= 1900) {
+      var iso2 = c + "-" + String(a).padStart(2, "0") + "-" + String(b).padStart(2, "0");
+      var d2 = new Date(iso2 + "T00:00:00");
+      return isNaN(d2.getTime()) ? "" : iso2;
+    }
+  }
+
+  // Last resort: try native Date parsing
+  var fallback = new Date(s);
+  if (!isNaN(fallback.getTime())) {
+    var y = fallback.getFullYear();
+    var m = String(fallback.getMonth() + 1).padStart(2, "0");
+    var dd = String(fallback.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + dd;
+  }
+
+  return "";
+};
+
 window.fmtElapsed = function(s) {
   var m = Math.floor(s / 60);
   var sec = s % 60;
@@ -311,7 +354,7 @@ window.loadRecords = async function() {
       return parsed.map(function(rec) {
         return {
           id: rec.id || Date.now().toString(),
-          date: rec.date || new Date().toISOString().slice(0, 10),
+          date: normalizeDate(rec.date) || new Date().toISOString().slice(0, 10),
           time: rec.time || "",
           volume: rec.volume != null ? String(rec.volume) : "",
           type: CONFIG.types.includes(rec.type) ? rec.type : "Standard",
@@ -383,7 +426,7 @@ window.loadIntakes = async function() {
       return parsed.map(function(i) {
         return {
           id: i.id || Date.now().toString(),
-          date: i.date || "",
+          date: normalizeDate(i.date) || i.date || "",
           time: i.time || "",
           category: i.category === "Meal" ? "Meal" : "Drink",
           subtype: i.subtype || (i.category === "Meal" ? "Snack" : "Water"),
