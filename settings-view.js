@@ -144,7 +144,7 @@ window.SettingsView = function SettingsView({
 
   // ── Provider config form ──
   const [provForm, setProvForm] = useState({
-    preparedFor: "", preparedBy: "", reviewedBy: "", contact: "",
+    descriptor: "", preparedFor: "", preparedBy: "", reviewedBy: "", contact: "",
   });
   const [showProviderForm, setShowProviderForm] = useState(false);
 
@@ -152,6 +152,7 @@ window.SettingsView = function SettingsView({
   useEffect(() => {
     if (providerConfig) {
       setProvForm({
+        descriptor: providerConfig.descriptor || "",
         preparedFor: providerConfig.preparedFor || "",
         preparedBy: providerConfig.preparedBy || "",
         reviewedBy: providerConfig.reviewedBy || "",
@@ -196,10 +197,10 @@ window.SettingsView = function SettingsView({
 
   const handleProviderSave = async () => {
     const f = provForm;
-    const anyFilled = f.preparedFor || f.preparedBy || f.reviewedBy || f.contact;
-    const allFilled = f.preparedFor && f.preparedBy && f.reviewedBy && f.contact;
+    const anyFilled = f.descriptor || f.preparedFor || f.preparedBy || f.reviewedBy || f.contact;
+    const allFilled = f.descriptor && f.preparedFor && f.preparedBy && f.reviewedBy && f.contact;
     if (anyFilled && !allFilled) {
-      showToast("All four fields are required if any field is filled");
+      showToast("All five fields are required if any field is filled");
       return;
     }
     if (!anyFilled) {
@@ -209,6 +210,7 @@ window.SettingsView = function SettingsView({
       showToast("Provider configuration cleared");
     } else {
       const cfg = {
+        descriptor: f.descriptor.trim(),
         preparedFor: f.preparedFor.trim(),
         preparedBy: f.preparedBy.trim(),
         reviewedBy: f.reviewedBy.trim(),
@@ -603,7 +605,7 @@ window.SettingsView = function SettingsView({
 
           {providerConfig && !showProviderForm && (
             <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.8 }}>
-              <div>This prototype has been prepared specifically for <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedFor}</strong> by Dr. <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedBy}</strong>.</div>
+              <div>This <strong style={{ color: "#e2e8f0" }}>{providerConfig.descriptor}</strong> has been prepared specifically for <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedFor}</strong> by <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedBy}</strong>.</div>
               <div>This configuration has been reviewed by <strong style={{ color: "#e2e8f0" }}>{providerConfig.reviewedBy}</strong>.</div>
               <div>If you have questions or concerns, please contact <strong style={{ color: "#e2e8f0" }}>{providerConfig.contact}</strong>.</div>
             </div>
@@ -611,11 +613,15 @@ window.SettingsView = function SettingsView({
 
           {showProviderForm && (
             <div>
+              <Field label="Descriptor">
+                <input value={provForm.descriptor} onChange={e => setProvForm(f => ({...f, descriptor: e.target.value}))}
+                  placeholder="e.g. voiding diary, treatment log..." style={{ ...inputStyle, padding: "8px 12px", fontSize: 13 }} />
+              </Field>
               <Field label="Prepared specifically for">
                 <input value={provForm.preparedFor} onChange={e => setProvForm(f => ({...f, preparedFor: e.target.value}))}
                   placeholder="Patient name..." style={{ ...inputStyle, padding: "8px 12px", fontSize: 13 }} />
               </Field>
-              <Field label="Prepared by (Dr.)">
+              <Field label="Prepared by">
                 <input value={provForm.preparedBy} onChange={e => setProvForm(f => ({...f, preparedBy: e.target.value}))}
                   placeholder="Doctor name..." style={{ ...inputStyle, padding: "8px 12px", fontSize: 13 }} />
               </Field>
@@ -628,7 +634,7 @@ window.SettingsView = function SettingsView({
                   placeholder="Phone number or email..." style={{ ...inputStyle, padding: "8px 12px", fontSize: 13 }} />
               </Field>
               <div style={{ fontSize: 11, color: "#475569", marginBottom: 10 }}>
-                If any field is filled, all four fields are required. Leave all blank to clear.
+                If any field is filled, all five fields are required. Leave all blank to clear.
               </div>
               <button onClick={handleProviderSave} style={{
                 width: "100%", padding: 10, borderRadius: 10, border: "none",

@@ -285,8 +285,8 @@ window.ReportView = function ReportView({
     ${providerConfig && providerConfig.preparedFor ? `
     <div style="margin:12px 0 16px;padding:14px 18px;background:#f0f9ff;border:1px solid #bfdbfe;border-radius:8px;">
       <div style="font-size:13px;color:#334155;line-height:1.8;">
-        This prototype has been prepared specifically for <strong>${providerConfig.preparedFor.replace(/</g,'&lt;')}</strong>
-        by Dr. <strong>${providerConfig.preparedBy.replace(/</g,'&lt;')}</strong>.
+        This ${(providerConfig.descriptor || 'app').replace(/</g,'&lt;')} has been prepared specifically for <strong>${providerConfig.preparedFor.replace(/</g,'&lt;')}</strong>
+        by <strong>${providerConfig.preparedBy.replace(/</g,'&lt;')}</strong>.
         This configuration has been reviewed by <strong>${providerConfig.reviewedBy.replace(/</g,'&lt;')}</strong>.
       </div>
       <div style="font-size:12px;color:#64748b;margin-top:6px;">

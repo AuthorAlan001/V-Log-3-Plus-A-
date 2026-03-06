@@ -231,7 +231,7 @@ function NeuroStimLog() {
     <div style={{
       ...containerStyle,
       background: adminMode
-        ? "linear-gradient(180deg, #3d1a2e 0%, #2e1a2a 100%)"
+        ? "linear-gradient(180deg, #6b3065 0%, #4e2548 100%)"
         : containerStyle.background,
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -350,7 +350,7 @@ function NeuroStimLog() {
           borderBottom: "1px solid rgba(59,130,246,0.15)",
           fontSize: 12, color: "#94a3b8", lineHeight: 1.7,
         }}>
-          <div>This prototype has been prepared specifically for <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedFor}</strong> by Dr. <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedBy}</strong>.</div>
+          <div>This <strong style={{ color: "#e2e8f0" }}>{providerConfig.descriptor || "app"}</strong> has been prepared specifically for <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedFor}</strong> by <strong style={{ color: "#e2e8f0" }}>{providerConfig.preparedBy}</strong>.</div>
           <div>This configuration has been reviewed by <strong style={{ color: "#e2e8f0" }}>{providerConfig.reviewedBy}</strong>.</div>
           <div>If you have questions or concerns, please contact{" "}
             {providerConfig.contact.includes("@")
